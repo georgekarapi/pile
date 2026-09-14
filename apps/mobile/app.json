@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "Pileup",
+    "slug": "pileup",
+    "scheme": "pileup",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "ios": { "bundleIdentifier": "com.pileup.app", "usesAppleSignIn": true },
+    "android": { "package": "com.pileup.app" },
+    "plugins": ["expo-router", "expo-apple-authentication"],
+    "experiments": { "typedRoutes": true }
+  }
+}
