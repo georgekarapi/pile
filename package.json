@@ -2,6 +2,7 @@
   "name": "pileup",
   "private": true,
   "packageManager": "npm@11.12.1",
+  "engines": { "node": ">=20 <21" },
   "workspaces": ["apps/*", "packages/*", "functions"],
   "scripts": {
     "build": "npm run build -w @pileup/shared && npm run build -w @pileup/functions",
