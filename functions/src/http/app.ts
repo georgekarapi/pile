@@ -5,7 +5,7 @@ import { assertPlanInput, assertTransactionWithinPolicy } from "@pileup/shared";
 import { z } from "zod";
 import { allowedOrigins, basketRegistry, stripePriceByAmount } from "../config.js";
 import { getUserId, requireAuth, type AuthenticatedRequest } from "../auth.js";
-import { claimMutation, completeMutation, getCard, getPlan, getUser, saveCard, savePlan, saveUser } from "../repository.js";
+import { claimMutation, completeMutation, getCard, getCurrentPlan, getPlan, getUser, saveCard, savePlan, saveUser } from "../repository.js";
 import { providers } from "../adapters/factory.js";
 import { createBillingSubscription } from "../adapters/stripe-billing.js";
 
@@ -55,6 +55,16 @@ app.use(cors({
 app.use(express.json());
 
 app.get("/v1/healthz", (_req, res) => res.json({ ok: true, mode: process.env.PILEUP_MODE ?? "demo" }));
+
+app.get("/v1/plans/current", requireAuth, async (req: AuthenticatedRequest, res) => {
+  const plan = await getCurrentPlan(getUserId(req));
+  res.json({ plan: plan ?? null });
+});
+
+app.get("/v1/cards/current", requireAuth, async (req: AuthenticatedRequest, res) => {
+  const card = await getCard(getUserId(req));
+  res.json({ card: card ?? null });
+});
 
 app.post("/v1/plans", requireAuth, async (req: AuthenticatedRequest, res) => {
   try {

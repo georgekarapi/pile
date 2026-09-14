@@ -15,6 +15,14 @@ export async function getActivePlan(userId: string): Promise<Plan | undefined> {
   return snap.empty ? undefined : snap.docs[0].data() as Plan;
 }
 
+/** Returns the most recently updated user preference; it is never used for balances. */
+export async function getCurrentPlan(userId: string): Promise<Plan | undefined> {
+  const snap = await db().collection("plans").where("userId", "==", userId).limit(20).get();
+  return snap.docs
+    .map((doc) => doc.data() as Plan)
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0];
+}
+
 export async function listLivePlans(limit = 250): Promise<Plan[]> {
   const snap = await db().collection("plans").where("status", "==", "live").limit(limit).get();
   return snap.docs.map((doc) => doc.data() as Plan);

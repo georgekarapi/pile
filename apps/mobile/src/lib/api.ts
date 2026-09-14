@@ -31,11 +31,13 @@ function mutation<T>(path: string, init: RequestInit): Promise<T> {
 
 export const api = {
   createPlan: (amountUsd: 30 | 50 | 100) => mutation<{ plan: Plan }>("/v1/plans", { method: "POST", body: JSON.stringify({ amountUsd }) }),
+  currentPlan: () => request<{ plan: Plan | null }>("/v1/plans/current"),
   activatePlan: (id: string) => mutation<{ subscriptionId: string; customerId: string; clientSecret?: string; ephemeralKey?: string; mode: "demo" | "live" }>(`/v1/plans/${id}/activate`, { method: "POST" }),
   pausePlan: (id: string) => mutation<void>(`/v1/plans/${id}/pause`, { method: "POST" }),
   pile: () => request<{ address: string; health: Health; source: "demo" | "live" }>("/v1/pile"),
   health: () => request<Health>("/v1/health"),
   kyc: () => mutation<{ url: string }>("/v1/bridge/kyc-session", { method: "POST" }),
+  currentCard: () => request<{ card: { bridgeCardAccountId?: string } | null }>("/v1/cards/current"),
   card: () => mutation<{ card: { bridgeCardAccountId: string } }>("/v1/cards", { method: "POST" }),
   freezeCard: (cardId: string, frozen: boolean) => mutation<void>(`/v1/cards/${cardId}/freeze`, { method: "POST", body: JSON.stringify({ frozen }) }),
   repay: (amountUsd: number) => mutation<{ signature: string; amountUsd: number }>("/v1/debt/repay", { method: "POST", body: JSON.stringify({ amountUsd }) })

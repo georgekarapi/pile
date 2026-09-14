@@ -1,7 +1,8 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useStripe } from "@stripe/stripe-react-native";
 import { router } from "expo-router";
 import { Pause, Play, ReceiptText } from "lucide-react-native";
+import { useEffect } from "react";
 import { Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api } from "@/lib/api";
@@ -11,8 +12,11 @@ import { Card } from "@/components/ui/card";
 import { useAppStore } from "@/stores/app-store";
 
 export default function PlanScreen() {
-  const plan = useAppStore((state) => state.plan);
+  const storedPlan = useAppStore((state) => state.plan);
   const setPlan = useAppStore((state) => state.setPlan);
+  const persistedPlan = useQuery({ queryKey: ["current-plan"], queryFn: api.currentPlan });
+  useEffect(() => { if (persistedPlan.data?.plan) setPlan(persistedPlan.data.plan); }, [persistedPlan.data?.plan, setPlan]);
+  const plan = persistedPlan.data?.plan ?? storedPlan;
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const activate = useMutation({ mutationFn: async () => {
     if (!plan) throw new Error("Create a plan first");
