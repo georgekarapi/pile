@@ -12,6 +12,13 @@ import { createBillingSubscription } from "../adapters/stripe-billing.js";
 const planSchema = z.object({ amountUsd: z.union([z.literal(30), z.literal(50), z.literal(100)]), weights: z.array(z.object({ symbol: z.string(), mint: z.string(), bps: z.number().int() })).optional() });
 const freezeSchema = z.object({ frozen: z.boolean() });
 
+function assertConfiguredBasket(weights: { symbol: string; mint: string; bps: number }[]): void {
+  const configuredAssets = new Map(basketRegistry.map((asset) => [asset.mint, asset.symbol]));
+  for (const weight of weights) {
+    if (configuredAssets.get(weight.mint) !== weight.symbol) throw new Error("Basket contains an unsupported asset");
+  }
+}
+
 function idempotencyKey(req: express.Request): string {
   const key = req.header("idempotency-key");
   if (!key || key.length < 16 || key.length > 255) throw new Error("A valid Idempotency-Key header is required");
@@ -73,6 +80,7 @@ app.post("/v1/plans", requireAuth, async (req: AuthenticatedRequest, res) => {
       const userId = getUserId(req);
       const weights = input.weights ?? [...basketRegistry];
       assertPlanInput(input.amountUsd, weights);
+      assertConfiguredBasket(weights);
       const timestamp = new Date().toISOString();
       const plan = {
         id: randomUUID(), userId, amountUsd: input.amountUsd, interval: "week" as const, weights,

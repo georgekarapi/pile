@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { computeHealth } from "./health.js";
-import { splitAtomicAmount } from "./validation.js";
+import { assertPlanInput, splitAtomicAmount } from "./validation.js";
 import { assertTransactionWithinPolicy } from "./transaction-policy.js";
 
 describe("computeHealth", () => {
@@ -41,5 +41,14 @@ describe("splitAtomicAmount", () => {
       { symbol: "AAPLx", mint: "aapl", bps: 3000 }
     ]);
     expect(output).toEqual([40n, 30n, 30n]);
+  });
+});
+
+describe("plan validation", () => {
+  it("rejects duplicate basket assets", () => {
+    expect(() => assertPlanInput(50, [
+      { symbol: "SPYx", mint: "spy", bps: 5000 },
+      { symbol: "SPYx", mint: "spy", bps: 5000 }
+    ])).toThrow("same asset");
   });
 });
