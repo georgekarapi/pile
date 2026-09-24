@@ -6,6 +6,7 @@ import { stripeWebhook } from "./webhooks/stripe.js";
 import { assertLiveConfiguration } from "./config.js";
 import { providers } from "./adapters/factory.js";
 import { getCard, listLivePlans, saveCard, saveUser } from "./repository.js";
+export { processFundingCycle } from "./tasks/funding-cycle.js";
 
 if (!getApps().length) initializeApp();
 assertLiveConfiguration();

@@ -10,9 +10,8 @@ const environment = z.object({
   PILEUP_MINT_SPYX: z.string().default("CONFIGURE_SPYX_MINT"),
   PILEUP_MINT_NVDAX: z.string().default("CONFIGURE_NVDAX_MINT"),
   PILEUP_MINT_AAPLX: z.string().default("CONFIGURE_AAPLX_MINT"),
-  PILEUP_STRIPE_PRICE_WEEKLY_30: z.string().default("price_CONFIGURE_WEEKLY_30"),
-  PILEUP_STRIPE_PRICE_WEEKLY_50: z.string().default("price_CONFIGURE_WEEKLY_50"),
-  PILEUP_STRIPE_PRICE_WEEKLY_100: z.string().default("price_CONFIGURE_WEEKLY_100"),
+  PILEUP_STRIPE_PRODUCT_ID: z.string().default("prod_CONFIGURE_WEEKLY_PILE"),
+  PILEUP_STRIPE_PORTAL_CONFIGURATION_ID: z.string().optional(),
   HELIUS_RPC_URL: z.string().url().optional(),
   JUPITER_API_KEY: z.string().optional(),
   KAMINO_MARKET_ADDRESS: z.string().optional(),
@@ -34,12 +33,6 @@ export const basketRegistry = [
   { symbol: "AAPLx", mint: config.PILEUP_MINT_AAPLX, bps: 3000 }
 ] as const;
 
-export const stripePriceByAmount: Record<30 | 50 | 100, string> = {
-  30: config.PILEUP_STRIPE_PRICE_WEEKLY_30,
-  50: config.PILEUP_STRIPE_PRICE_WEEKLY_50,
-  100: config.PILEUP_STRIPE_PRICE_WEEKLY_100
-};
-
 export function assertLiveConfiguration(): void {
   if (config.PILEUP_MODE !== "live") return;
   const required = [
@@ -53,6 +46,6 @@ export function assertLiveConfiguration(): void {
     config.KAMINO_MARKET_ADDRESS
   ];
   if (required.some((value) => !value)) throw new Error("Live mode requires all provider credentials and chain configuration");
-  const configuredValues = [...basketRegistry.map((asset) => asset.mint), ...Object.values(stripePriceByAmount), config.PILEUP_USDC_MINT];
+  const configuredValues = [...basketRegistry.map((asset) => asset.mint), config.PILEUP_STRIPE_PRODUCT_ID, config.PILEUP_USDC_MINT];
   if (configuredValues.some((value) => value.includes("CONFIGURE_"))) throw new Error("Live mode cannot use placeholder mints or Stripe prices");
 }

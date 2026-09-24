@@ -11,13 +11,15 @@ const privy = config.PRIVY_APP_ID && config.PRIVY_APP_SECRET
   : undefined;
 
 export async function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
-  const userId = req.header("x-pileup-demo-user");
-  if (process.env.PILEUP_MODE === "demo" && userId) {
-    req.pileupUserId = userId;
-    next();
-    return;
-  }
   const token = req.header("authorization")?.replace(/^Bearer\s+/i, "");
+  if (!token) {
+    const userId = req.header("x-pileup-demo-user");
+    if (process.env.PILEUP_MODE === "demo" && userId) {
+      req.pileupUserId = userId;
+      next();
+      return;
+    }
+  }
   if (!privy || !token) return res.status(401).json({ error: "A verified Privy access token is required" });
   try {
     const claims = await privy.utils().auth().verifyAuthToken(token);
