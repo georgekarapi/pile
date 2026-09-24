@@ -14,12 +14,28 @@ import { useAppStore, type MixId } from "@/stores/app-store";
 
 const money = (amount: number) => `$${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const selectedWeights: Record<MixId, { symbol: string; bps: number }[]> = {
+  prestocks: [{ symbol: "OPENAI", bps: 4000 }, { symbol: "SPACEX", bps: 3000 }, { symbol: "ANTHROPIC", bps: 3000 }],
   balanced: [{ symbol: "SPYx", bps: 4000 }, { symbol: "AAPLx", bps: 3000 }, { symbol: "NVDAx", bps: 3000 }],
   market: [{ symbol: "SPYx", bps: 10_000 }],
   tech: [{ symbol: "AAPLx", bps: 5000 }, { symbol: "NVDAx", bps: 5000 }]
 };
-const mixName = (weights: { symbol: string; bps: number }[]) => weights.length === 1 ? "The whole market" : weights.length === 2 ? "Big tech" : "A bit of both";
-const mixColor: Record<string, string> = { SPYx: "#111110", AAPLx: "#CED25F", NVDAx: "#777A67" };
+const mixName = (weights: { symbol: string; bps: number }[]) =>
+  weights.some((w) => w.symbol === "OPENAI" || w.symbol === "SPACEX" || w.symbol === "ANTHROPIC")
+    ? "Pre-IPO Giants (PreStocks)"
+    : weights.length === 1
+      ? "The whole market"
+      : weights.length === 2
+        ? "Big tech"
+        : "A bit of both";
+const mixColor: Record<string, string> = {
+  OPENAI: "#10A37F",
+  SPACEX: "#1E3A8A",
+  ANTHROPIC: "#CC785C",
+  ANDURIL: "#D97706",
+  SPYx: "#111110",
+  AAPLx: "#CED25F",
+  NVDAx: "#777A67"
+};
 
 function pieSlice(start: number, sweep: number) {
   const point = (degrees: number) => ({ x: 32 + 32 * Math.cos(degrees * Math.PI / 180), y: 32 + 32 * Math.sin(degrees * Math.PI / 180) });

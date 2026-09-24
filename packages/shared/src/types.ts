@@ -13,7 +13,16 @@ export type FundingState =
   | "blocked_demo_cap"
   | "needs_attention";
 
-export type BasketWeight = { symbol: string; mint: string; bps: number };
+export type MixId = "balanced" | "market" | "tech" | "prestocks";
+export type BasketWeight = { symbol: string; mint: string; bps: number; name?: string; image?: string; markPrice?: number; impliedValuation?: number };
+export type PlanOption = {
+  id: MixId;
+  title: string;
+  detail: string;
+  tag?: string;
+  isPartner?: boolean;
+  weights: BasketWeight[];
+};
 export type PlanRevision = { amountUsd: number; weights: BasketWeight[]; stripePriceId: string; effectiveAt: string };
 export type PendingPlanChange = { key: string; amountUsd: number; weights: BasketWeight[]; expectedUpdatedAt: string; startedAt: string };
 

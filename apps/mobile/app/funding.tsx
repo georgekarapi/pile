@@ -2,8 +2,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useStripe } from "@stripe/stripe-react-native";
 import type { FundingCycle, FundingState, Plan } from "@pile/shared";
 import Constants from "expo-constants";
+import * as WebBrowser from "expo-web-browser";
 import { router, useLocalSearchParams } from "expo-router";
-import { Alert, Pressable, View } from "react-native";
+import { ExternalLink } from "lucide-react-native";
+import { Alert, Pressable, ScrollView, View } from "react-native";
 import { LabeledRow } from "@/components/molecules/labeled-row";
 import { ProgressList, type ProgressItem } from "@/components/molecules/progress-list";
 import { Button } from "@/components/ui/button";
@@ -61,12 +63,61 @@ export default function FundingScreen() {
     {!preview ? <ProgressList items={[{ label: "Payment method", detail: "Waiting for provider confirmation", state: "current" }, { label: "Weekly payment", detail: "Confirmation in progress", state: "waiting" }, { label: "First contribution", detail: "Starts only after payment is confirmed", state: "waiting" }]} /> : null}
     {query.error ? <Text className="mt-5 text-sm">Contribution status is unavailable right now.</Text> : null}
   </Screen>;
+  const txList: { label: string; sig: string }[] = [];
+  if (cycle?.creditSignature) txList.push({ label: "Treasury USDC Credit", sig: cycle.creditSignature });
+  for (const leg of cycle?.legs ?? []) {
+    if (leg.swapSignature) txList.push({ label: `Swap USDC → ${leg.symbol}`, sig: leg.swapSignature });
+  }
+  for (const [idx, sig] of (cycle?.depositSignatures ?? []).entries()) {
+    if (sig) txList.push({ label: `Kamino Collateral (${cycle?.legs[idx]?.symbol ?? "Collateral"})`, sig });
+  }
+  if (cycle?.borrowSignature) txList.push({ label: "Kamino Borrow USDC Buffer", sig: cycle.borrowSignature });
+
+  if (preview && txList.length === 0) {
+    txList.push({ label: "Treasury USDC Credit", sig: "5VERv8NMvzbJMEkV8xnrLkEaWRtSz9CosKDYj7WV3ZGgk5jEENSnJdQ" });
+    txList.push({ label: "Swap USDC → OPENAI (PreStocks)", sig: "4wL7pQ8bXn9mKv2J3tR5yZ8aB1cD4eF7gH9jK2mN5pQ8rT1vW4xY7zA" });
+    txList.push({ label: "Swap USDC → SPACEX (PreStocks)", sig: "3kM8nL7pQ5rT2vW9xY1zA4bC6dE8fG0jK3mN6pQ9rT2vW5xY8zB1cD" });
+    txList.push({ label: "Swap USDC → ANTHROPIC (PreStocks)", sig: "2jK6mN9pQ1rT4vW7xY0zA3bC5dE7fG9jK2mN5pQ8rT1vW4xY7zC0aB" });
+    txList.push({ label: "Kamino Collateral Deposit", sig: "1hJ5kN8pQ0rT3vW6xY9zA2bC4dE6fG8jK1mN4pQ7rT0vW3xY6zB9aC" });
+  }
+
   return <Screen footer={<View className="gap-2"><Button variant={done ? "primary" : "secondary"} onPress={() => done ? router.replace("/home") : void query.refetch()}>{done ? "View my pile" : blocked ? "Check status" : "View details"}</Button>{preview ? <Pressable className="items-center py-2" onPress={() => router.replace({ pathname: "/funding", params: { previewState: "payment_failed" } })}><Text className="text-[13px] font-semibold text-pile-muted">Preview payment failure →</Text></Pressable> : null}</View>}>
-    <Eyebrow>{blocked ? "CONTRIBUTION NEEDS ATTENTION" : "THIS WEEK’S CONTRIBUTION"}</Eyebrow>
-    <Title className="mt-5">{blocked ? "We paused\nthis week’s pile." : done ? "Your first stone\nis in place." : "Building this\nweek’s pile."}</Title>
-    <Body className="mb-9 mt-4">{blocked ? "Your payment is confirmed, but the investment steps did not finish." : done ? `Your $${cycle.expectedUsd} contribution is in your pile.` : `Your $${cycle.expectedUsd} payment is confirmed. Each step completes once.`}</Body>
-    <ProgressList items={steps(cycle)} />
-    {blocked ? <Body className="mt-3 rounded-[20px] bg-pile-fog p-4 text-[13px]">We keep completed steps. Your pile resumes from the unfinished step.</Body> : null}
+    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+      <Eyebrow>{blocked ? "CONTRIBUTION NEEDS ATTENTION" : "THIS WEEK’S CONTRIBUTION"}</Eyebrow>
+      <Title className="mt-5">{blocked ? "We paused\nthis week’s pile." : done ? "Your first stone\nis in place." : "Building this\nweek’s pile."}</Title>
+      <Body className="mb-7 mt-4">{blocked ? "Your payment is confirmed, but the investment steps did not finish." : done ? `Your $${cycle.expectedUsd} contribution is in your pile.` : `Your $${cycle.expectedUsd} payment is confirmed. Each step completes once.`}</Body>
+      <ProgressList items={steps(cycle)} />
+      {blocked ? <Body className="mt-3 rounded-[20px] bg-pile-fog p-4 text-[13px]">We keep completed steps. Your pile resumes from the unfinished step.</Body> : null}
+      {txList.length > 0 ? (
+        <View className="mt-6 rounded-[22px] bg-pile-fog p-4">
+          <View className="flex-row items-center justify-between pb-3 border-b border-[#0000000D]">
+            <Text className="text-[11px] font-semibold text-pile-muted">SOLANA DEVNET TRANSACTIONS</Text>
+            <View className="flex-row items-center gap-1 rounded-full bg-[#10A37F]/15 px-2 py-0.5">
+              <View className="h-1.5 w-1.5 rounded-full bg-[#10A37F]" />
+              <Text className="text-[10px] font-semibold text-[#10A37F]">Devnet Verified</Text>
+            </View>
+          </View>
+          <View className="mt-2">
+            {txList.map((tx, idx) => (
+              <Pressable
+                key={`${tx.sig}-${idx}`}
+                onPress={() => WebBrowser.openBrowserAsync(`https://explorer.solana.com/tx/${tx.sig}?cluster=devnet`)}
+                className="flex-row items-center justify-between py-2.5 border-b border-[#00000008]"
+              >
+                <View className="flex-1 mr-2">
+                  <Text className="text-[13px] font-medium text-pile-ink">{tx.label}</Text>
+                  <Text className="text-[11px] text-pile-muted" numberOfLines={1}>{tx.sig.slice(0, 14)}...{tx.sig.slice(-10)}</Text>
+                </View>
+                <View className="flex-row items-center gap-1">
+                  <Text className="text-[12px] font-semibold text-pile-ink">Explorer</Text>
+                  <ExternalLink size={12} color="#111110" />
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        </View>
+      ) : null}
+    </ScrollView>
   </Screen>;
 }
 

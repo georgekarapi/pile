@@ -1,4 +1,4 @@
-import type { CardRecord, FundingCycle, Health, Plan } from "@pile/shared";
+import type { CardRecord, FundingCycle, Health, MixId, Plan, PlanOption } from "@pile/shared";
 import Constants from "expo-constants";
 
 const baseUrl = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:5001/YOUR_PROJECT/europe-west1/api";
@@ -33,8 +33,9 @@ function mutation<T>(path: string, init: RequestInit): Promise<T> {
 }
 
 export const api = {
-  createPlan: (amountUsd: number, mix: "balanced" | "market" | "tech") => mutation<{ plan: Plan }>("/v1/plans", { method: "POST", body: JSON.stringify({ amountUsd, mix }) }),
-  changePlan: (id: string, amountUsd: number, mix: "balanced" | "market" | "tech", expectedUpdatedAt: string) => mutation<{ plan: Plan }>(`/v1/plans/${id}`, { method: "PATCH", headers: { "Idempotency-Key": `plan-change-${id}-${expectedUpdatedAt}-${amountUsd}-${mix}` }, body: JSON.stringify({ amountUsd, mix, expectedUpdatedAt }) }),
+  planOptions: () => request<{ options: PlanOption[]; prestocksCatalog: Record<string, unknown>[] }>("/v1/plans/options"),
+  createPlan: (amountUsd: number, mix: MixId) => mutation<{ plan: Plan }>("/v1/plans", { method: "POST", body: JSON.stringify({ amountUsd, mix }) }),
+  changePlan: (id: string, amountUsd: number, mix: MixId, expectedUpdatedAt: string) => mutation<{ plan: Plan }>(`/v1/plans/${id}`, { method: "PATCH", headers: { "Idempotency-Key": `plan-change-${id}-${expectedUpdatedAt}-${amountUsd}-${mix}` }, body: JSON.stringify({ amountUsd, mix, expectedUpdatedAt }) }),
   currentPlan: () => request<{ plan: Plan | null }>("/v1/plans/current"),
   paymentMethodSession: () => mutation<{ url: string }>("/v1/billing/payment-method-session", { method: "POST" }),
   syncPaymentMethod: () => mutation<{ changed: boolean }>("/v1/billing/payment-method-sync", { method: "POST" }),

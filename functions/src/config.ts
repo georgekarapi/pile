@@ -10,6 +10,10 @@ const environment = z.object({
   PILE_MINT_SPYX: z.string().default(process.env.PILEUP_MINT_SPYX ?? "CONFIGURE_SPYX_MINT"),
   PILE_MINT_NVDAX: z.string().default(process.env.PILEUP_MINT_NVDAX ?? "CONFIGURE_NVDAX_MINT"),
   PILE_MINT_AAPLX: z.string().default(process.env.PILEUP_MINT_AAPLX ?? "CONFIGURE_AAPLX_MINT"),
+  PILE_MINT_OPENAI: z.string().default(process.env.PILEUP_MINT_OPENAI ?? "PreweJYECqtQwBtpxHL171nL2K6umo692gTm7Q3rpgF"),
+  PILE_MINT_SPACEX: z.string().default(process.env.PILEUP_MINT_SPACEX ?? "PreANxuXjsy2pvisWWMNB6YaJNzr7681wJJr2rHsfTh"),
+  PILE_MINT_ANTHROPIC: z.string().default(process.env.PILEUP_MINT_ANTHROPIC ?? "Pren1FvFX6J3E4kXhJuCiAD5aDmGEb7qJRncwA8Lkhw"),
+  PILE_MINT_ANDURIL: z.string().default(process.env.PILEUP_MINT_ANDURIL ?? "PresTj4Yc2bAR197Er7wz4UUKSfqt6FryBEdAriBoQB"),
   PILE_STRIPE_PRODUCT_ID: z.string().default(process.env.PILEUP_STRIPE_PRODUCT_ID ?? "prod_CONFIGURE_WEEKLY_PILE"),
   PILE_STRIPE_PORTAL_CONFIGURATION_ID: z.string().optional().default(process.env.PILEUP_STRIPE_PORTAL_CONFIGURATION_ID ?? ""),
   HELIUS_RPC_URL: z.string().url().optional(),
@@ -32,6 +36,14 @@ export const basketRegistry = [
   { symbol: "NVDAx", mint: config.PILE_MINT_NVDAX, bps: 3000 },
   { symbol: "AAPLx", mint: config.PILE_MINT_AAPLX, bps: 3000 }
 ] as const;
+
+export const prestocksRegistry = [
+  { symbol: "OPENAI", mint: config.PILE_MINT_OPENAI, bps: 4000 },
+  { symbol: "SPACEX", mint: config.PILE_MINT_SPACEX, bps: 3000 },
+  { symbol: "ANTHROPIC", mint: config.PILE_MINT_ANTHROPIC, bps: 3000 }
+] as const;
+
+export const allConfiguredAssets = [...basketRegistry, ...prestocksRegistry] as const;
 
 export function assertLiveConfiguration(): void {
   if (config.PILE_MODE !== "live") return;

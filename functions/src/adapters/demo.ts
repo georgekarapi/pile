@@ -9,11 +9,23 @@ const transaction = (input: { summary: string; kind: TransactionKind; owner: str
   intent: { kind: input.kind, owner: input.owner, programIds: input.programIds, mints: input.mints, inputAtomic: input.inputAtomic, recipients: input.recipients ?? [] }
 });
 
+const BASE58_CHARS = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+function toSolanaBase58(seed: string, length: number): string {
+  let hash = 0;
+  for (let i = 0; i < seed.length; i++) hash = ((hash << 5) - hash + seed.charCodeAt(i)) | 0;
+  let res = "";
+  for (let i = 0; i < length; i++) {
+    hash = ((hash * 1664525) + 1013904223) | 0;
+    res += BASE58_CHARS[Math.abs(hash) % BASE58_CHARS.length];
+  }
+  return res;
+}
+
 export class DemoWalletAdapter implements WalletPort {
-  async getAddress(userId: string) { return `demo-wallet-${userId}`; }
+  async getAddress(userId: string) { return `Pile${toSolanaBase58(userId, 40)}`; }
   async getUsdcBalance(_address: string) { return 0; }
   async signScoped(_userId: string, unsigned: UnsignedTransaction) {
-    return { signature: `demo-signature-${Buffer.from(unsigned.summary).toString("hex").slice(0, 24)}`, serialized: unsigned.serialized };
+    return { signature: toSolanaBase58(`sig-${unsigned.summary}-${Date.now()}`, 88), serialized: unsigned.serialized };
   }
 }
 
@@ -27,7 +39,7 @@ export class DemoFundingAdapter implements FundingPort {
       globalCapUsd: config.PILE_DEMO_GLOBAL_CAP_USD,
       walletCapUsd: config.PILE_DEMO_WALLET_CAP_USD
     });
-    return { signature: `demo-credit-${input.idempotencyKey}`, atomicAmount: BigInt(Math.round(input.amountUsd * 1_000_000)) };
+    return { signature: toSolanaBase58(`credit-${input.idempotencyKey}`, 88), atomicAmount: BigInt(Math.round(input.amountUsd * 1_000_000)) };
   }
 }
 

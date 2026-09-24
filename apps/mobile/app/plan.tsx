@@ -20,6 +20,7 @@ function reviewCosts() {
 
 function matchesMix(weights: { symbol: string; bps: number }[], mix: MixId) {
   const bySymbol = new Map(weights.map(({ symbol, bps }) => [symbol, bps]));
+  if (mix === "prestocks") return weights.length === 3 && bySymbol.get("OPENAI") === 4_000 && bySymbol.get("SPACEX") === 3_000 && bySymbol.get("ANTHROPIC") === 3_000;
   if (mix === "market") return weights.length === 1 && bySymbol.get("SPYx") === 10_000;
   if (mix === "tech") return weights.length === 2 && bySymbol.get("NVDAx") === 5_000 && bySymbol.get("AAPLx") === 5_000;
   return weights.length === 3 && bySymbol.get("SPYx") === 4_000 && bySymbol.get("NVDAx") === 3_000 && bySymbol.get("AAPLx") === 3_000;
@@ -34,7 +35,7 @@ function ExpoGoPlan() {
   const editing = mode === "edit";
   const amount = useAppStore((s) => s.draftAmount);
   const mix = useAppStore((s) => s.draftMix);
-  const displayMix = mix === "balanced" ? "A bit of both" : mix === "market" ? "The whole market" : "Big tech";
+  const displayMix = mix === "prestocks" ? "Pre-IPO Giants (PreStocks)" : mix === "balanced" ? "A bit of both" : mix === "market" ? "The whole market" : "Big tech";
   return <ReviewContent
     amount={amount}
     mix={displayMix}
@@ -80,7 +81,7 @@ function NativePlan() {
     void queryClient.invalidateQueries({ queryKey: ["current-plan"] });
     router.replace(mode === "changed" ? "/weekly-plan" : "/funding");
   } });
-  const displayAmount = amount; const displayMix = mix === "balanced" ? "A bit of both" : mix === "market" ? "The whole market" : "Big tech";
+  const displayAmount = amount; const displayMix = mix === "prestocks" ? "Pre-IPO Giants (PreStocks)" : mix === "balanced" ? "A bit of both" : mix === "market" ? "The whole market" : "Big tech";
   return <ReviewContent amount={displayAmount} mix={displayMix} paymentMethod={editing ? "On file" : "Add securely"} accountChecks="Signed in" action={start.isPending ? editing ? "Updating…" : "Starting…" : editing ? "Update weekly plan" : "Start my weekly pile"} onAction={() => start.mutate()} disabled={start.isPending || !persisted.isSuccess} error={start.error?.message ?? persisted.error?.message} editing={editing} />;
 }
 function ReviewContent({ amount, mix, paymentMethod, accountChecks, action, onAction, disabled, error, preview = false, editing = false }: { amount: number; mix: string; paymentMethod: string; accountChecks: string; action: string; onAction: () => void; disabled?: boolean; error?: string; preview?: boolean; editing?: boolean }) {
