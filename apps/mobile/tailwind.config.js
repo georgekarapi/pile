@@ -5,7 +5,13 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        pile: { 50: "#F5F3FF", 400: "#A78BFA", 500: "#7C3AED", 700: "#5B21B6", 950: "#130A2B" }
+        pile: {
+          paper: "#FAFAF8",
+          ink: "#111110",
+          muted: "#62625E",
+          fog: "#ECEBE6",
+          stone: "#D9D8D2"
+        }
       }
     }
   },
