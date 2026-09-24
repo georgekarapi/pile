@@ -1,25 +1,40 @@
-export type PlanStatus = "draft" | "pending_payment" | "live" | "paused" | "blocked";
+export type PlanStatus = "draft" | "pending_payment" | "live" | "paused" | "blocked" | "cancelled";
 export type FundingState =
   | "invoice_paid"
   | "crediting"
   | "credited"
   | "swapping"
+  | "swaps_submitted"
   | "depositing"
+  | "deposits_submitted"
   | "borrowing"
+  | "borrow_submitted"
   | "complete"
   | "blocked_demo_cap"
   | "needs_attention";
 
 export type BasketWeight = { symbol: string; mint: string; bps: number };
+export type PlanRevision = { amountUsd: number; weights: BasketWeight[]; stripePriceId: string; effectiveAt: string };
+export type PendingPlanChange = { key: string; amountUsd: number; weights: BasketWeight[]; expectedUpdatedAt: string; startedAt: string };
 
 export type Plan = {
   id: string;
   userId: string;
-  amountUsd: 30 | 50 | 100;
+  amountUsd: number;
   interval: "week";
   weights: BasketWeight[];
-  stripePriceId: string;
+  stripePriceId?: string;
+  activationKey?: string;
+  priorRevisions?: PlanRevision[];
+  pendingChange?: PendingPlanChange;
+  lastChangeKey?: string;
+  pendingPauseKey?: string;
+  lastPauseKey?: string;
+  pendingResumeKey?: string;
+  lastResumeKey?: string;
   stripeSubscriptionId?: string;
+  paymentIssue?: { invoiceId: string; kind: "failed" | "action_required"; occurredAt: string };
+  lastPaidInvoiceId?: string;
   status: PlanStatus;
   createdAt: string;
   updatedAt: string;
@@ -28,6 +43,8 @@ export type Plan = {
 export type PurchaseLeg = {
   mint: string;
   symbol: string;
+  /** Immutable allocation captured when the paid invoice created this cycle. */
+  bps?: number;
   inputUsdcAtomic: string;
   outputAtomic?: string;
   swapSignature?: string;
@@ -41,11 +58,18 @@ export type FundingCycle = {
   userId: string;
   expectedUsd: number;
   state: FundingState;
+  /** Last durable step to resume after a retryable failure. */
+  resumeState?: Exclude<FundingState, "needs_attention">;
   creditSignature?: string;
   creditUsdcAtomic?: string;
   legs: PurchaseLeg[];
   depositSignatures: string[];
   borrowSignature?: string;
+  /** Provider event that caused this cycle. Used for reconciliation, never as a balance. */
+  sourceEventId?: string;
+  /** Exact fiat amount received by Stripe in minor currency units. */
+  fiatAmountMinor?: number;
+  fiatCurrency?: string;
   attempts: number;
   lastError?: string;
   createdAt: string;

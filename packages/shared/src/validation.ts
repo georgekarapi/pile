@@ -1,10 +1,12 @@
 import type { BasketWeight } from "./types.js";
 
-export const ALLOWED_AMOUNTS = [30, 50, 100] as const;
+export const MIN_WEEKLY_AMOUNT_USD = 10;
+export const MAX_WEEKLY_AMOUNT_USD = 150;
+export const WEEKLY_AMOUNT_STEP_USD = 5;
 
-export function assertPlanInput(amountUsd: number, weights: BasketWeight[]): asserts amountUsd is 30 | 50 | 100 {
-  if (!ALLOWED_AMOUNTS.includes(amountUsd as 30 | 50 | 100)) throw new Error("Unsupported weekly contribution");
-  if (weights.length < 2 || weights.length > 3) throw new Error("A basket needs two or three assets");
+export function assertPlanInput(amountUsd: number, weights: BasketWeight[]): void {
+  if (!Number.isSafeInteger(amountUsd) || amountUsd < MIN_WEEKLY_AMOUNT_USD || amountUsd > MAX_WEEKLY_AMOUNT_USD || amountUsd % WEEKLY_AMOUNT_STEP_USD !== 0) throw new Error("Weekly contribution must be $10–$150 in $5 steps");
+  if (weights.length < 1 || weights.length > 3) throw new Error("A basket needs one to three assets");
   if (weights.reduce((total, weight) => total + weight.bps, 0) !== 10_000) throw new Error("Weights must total 10,000 bps");
   if (new Set(weights.map((weight) => weight.mint)).size !== weights.length) throw new Error("A basket cannot include the same asset twice");
   for (const weight of weights) {

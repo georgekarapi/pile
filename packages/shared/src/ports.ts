@@ -17,6 +17,7 @@ export type UnsignedTransaction = {
 };
 
 export type SignedTransaction = { signature: string; serialized: string };
+export type SubmittedTransaction = { signature: string };
 
 export interface WalletPort {
   getAddress(userId: string): Promise<string>;
@@ -30,9 +31,11 @@ export interface SwapPort {
 }
 
 export interface LendPort {
-  deposit(input: { owner: string; mint: string; amountAtomic: bigint }): Promise<UnsignedTransaction>;
-  borrowUsdc(input: { owner: string; amountAtomic: bigint }): Promise<UnsignedTransaction>;
-  repayUsdc(input: { owner: string; amountAtomic: bigint }): Promise<UnsignedTransaction>;
+  buildDeposit(input: { owner: string; mint: string; amountAtomic: bigint }): Promise<UnsignedTransaction>;
+  buildBorrowUsdc(input: { owner: string; amountAtomic: bigint }): Promise<UnsignedTransaction>;
+  buildRepayUsdc(input: { owner: string; amountAtomic: bigint }): Promise<UnsignedTransaction>;
+  submit(input: { transaction: UnsignedTransaction; signed: SignedTransaction }): Promise<SubmittedTransaction>;
+  confirm(signature: string): Promise<void>;
   getHealth(owner: string): Promise<Health>;
 }
 

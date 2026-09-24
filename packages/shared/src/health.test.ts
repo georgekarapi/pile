@@ -19,7 +19,7 @@ describe("computeHealth", () => {
 });
 
 describe("transaction policy", () => {
-  const policy = { owner: "user", allowedKinds: ["borrow"] as const, allowedProgramIds: ["kamino"], allowedMints: ["USDC"], maxInputAtomic: 1_000_000n };
+  const policy = { owner: "user", allowedKinds: ["borrow"] as const, allowedProgramIds: ["kamino"], allowedMints: ["USDC"], allowedRecipients: ["user"], maxInputAtomic: 1_000_000n };
   it("allows a scoped borrow only to the owner", () => {
     expect(() => assertTransactionWithinPolicy({ serialized: "x", summary: "borrow", intent: { kind: "borrow", owner: "user", programIds: ["kamino"], mints: ["USDC"], recipients: ["user"] } }, policy)).not.toThrow();
   });
@@ -27,7 +27,7 @@ describe("transaction policy", () => {
     expect(() => assertTransactionWithinPolicy({ serialized: "x", summary: "borrow", intent: { kind: "borrow", owner: "user", programIds: ["kamino"], mints: ["USDC"], recipients: ["attacker"] } }, policy)).toThrow("Borrow proceeds");
   });
   it("enforces an exact input cap for repayment", () => {
-    const repayPolicy = { owner: "user", allowedKinds: ["repay"] as const, allowedProgramIds: ["kamino", "spl-token"], allowedMints: ["USDC"], maxInputAtomic: 1_000_000n };
+    const repayPolicy = { owner: "user", allowedKinds: ["repay"] as const, allowedProgramIds: ["kamino", "spl-token"], allowedMints: ["USDC"], allowedRecipients: ["kamino"], maxInputAtomic: 1_000_000n };
     expect(() => assertTransactionWithinPolicy({ serialized: "x", summary: "repay", intent: { kind: "repay", owner: "user", programIds: ["kamino", "spl-token"], mints: ["USDC"], inputAtomic: 1_000_000n, recipients: ["kamino"] } }, repayPolicy)).not.toThrow();
     expect(() => assertTransactionWithinPolicy({ serialized: "x", summary: "repay", intent: { kind: "repay", owner: "user", programIds: ["kamino", "spl-token"], mints: ["USDC"], inputAtomic: 1_000_001n, recipients: ["kamino"] } }, repayPolicy)).toThrow("exceeds");
   });
