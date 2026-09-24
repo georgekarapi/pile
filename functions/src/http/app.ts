@@ -3,14 +3,24 @@ import express from "express";
 import { randomUUID } from "node:crypto";
 import { assertPlanInput, assertTransactionWithinPolicy } from "@pileup/shared";
 import { z } from "zod";
-import { allowedOrigins, basketRegistry, stripePriceByAmount } from "../config.js";
+import { allowedOrigins, basketRegistry, config } from "../config.js";
 import { getUserId, requireAuth, type AuthenticatedRequest } from "../auth.js";
-import { claimMutation, completeMutation, getCard, getCurrentPlan, getPlan, getUser, saveCard, savePlan, saveUser } from "../repository.js";
+import { beginPlanChange, beginPlanPause, beginPlanResume, claimMutation, completeMutation, finalizePlanChange, finalizePlanPause, finalizePlanResume, getActivePlan, getCard, getCurrentPlan, getLatestCycle, getPausedPlan, getPlan, getUser, releaseMutation, releasePlanChange, saveCard, savePlan, saveUser } from "../repository.js";
 import { providers } from "../adapters/factory.js";
-import { createBillingSubscription } from "../adapters/stripe-billing.js";
+import { changeBillingSubscription, createBillingSubscription, createPaymentMethodPortalSession, getBillingSubscriptionCheckout, pauseBillingSubscription, resumeBillingSubscription, syncBillingPaymentMethod } from "../adapters/stripe-billing.js";
+import { createBridgeKycLink, getBridgeKycLink, identityStatusFromBridge } from "../adapters/bridge-kyc.js";
 
-const planSchema = z.object({ amountUsd: z.union([z.literal(30), z.literal(50), z.literal(100)]), weights: z.array(z.object({ symbol: z.string(), mint: z.string(), bps: z.number().int() })).optional() });
+const planSchema = z.object({ amountUsd: z.number().int().min(10).max(150).multipleOf(5), mix: z.enum(["balanced", "market", "tech"]).optional(), weights: z.array(z.object({ symbol: z.string(), mint: z.string(), bps: z.number().int() })).optional() });
+const changePlanSchema = z.object({ amountUsd: z.number().int().min(10).max(150).multipleOf(5), mix: z.enum(["balanced", "market", "tech"]), expectedUpdatedAt: z.string().min(1) });
 const freezeSchema = z.object({ frozen: z.boolean() });
+
+function weightsForMix(mix: "balanced" | "market" | "tech") {
+  return mix === "market"
+    ? [{ ...basketRegistry[0], bps: 10_000 }]
+    : mix === "tech"
+      ? [{ ...basketRegistry[1], bps: 5_000 }, { ...basketRegistry[2], bps: 5_000 }]
+      : basketRegistry.map((asset) => ({ ...asset }));
+}
 
 function assertConfiguredBasket(weights: { symbol: string; mint: string; bps: number }[]): void {
   const configuredAssets = new Map(basketRegistry.map((asset) => [asset.mint, asset.symbol]));
@@ -31,7 +41,8 @@ async function respondToMutation(
   req: AuthenticatedRequest,
   res: express.Response,
   operation: string,
-  work: () => Promise<MutationResponse>
+  work: () => Promise<MutationResponse>,
+  releaseOnError = false
 ): Promise<void> {
   const userId = getUserId(req);
   const key = idempotencyKey(req);
@@ -45,8 +56,14 @@ async function respondToMutation(
     res.status(409).json({ error: "This request is still being processed; retry shortly with the same Idempotency-Key" });
     return;
   }
-  const response = await work();
-  await completeMutation({ userId, operation, key, response });
+  let response: MutationResponse;
+  try {
+    response = await work();
+    await completeMutation({ userId, operation, key, response });
+  } catch (error) {
+    if (releaseOnError) await releaseMutation({ userId, operation, key });
+    throw error;
+  }
   if (response.body === null) res.status(response.status).end();
   else res.status(response.status).json(response.body);
 }
@@ -68,9 +85,75 @@ app.get("/v1/plans/current", requireAuth, async (req: AuthenticatedRequest, res)
   res.json({ plan: plan ?? null });
 });
 
+app.post("/v1/billing/retry-checkout", requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = getUserId(req);
+    const plan = await getCurrentPlan(userId);
+    if (!plan || plan.status !== "pending_payment" || !plan.stripeSubscriptionId) return res.status(409).json({ error: "A pending first payment is required" });
+    const checkout = await getBillingSubscriptionCheckout({ subscriptionId: plan.stripeSubscriptionId, userId, planId: plan.id });
+    return res.json(checkout);
+  } catch (error) {
+    return res.status(502).json({ error: error instanceof Error ? error.message : "Unable to retry the first payment" });
+  }
+});
+
+app.post("/v1/billing/payment-method-session", requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    if (config.PILEUP_MODE !== "live") return res.status(409).json({ error: "Payment method settings are unavailable in demo mode" });
+    const userId = getUserId(req);
+    const plan = await getCurrentPlan(userId);
+    const user = await getUser(userId);
+    if (!plan || (plan.status !== "live" && plan.status !== "paused") || !plan.stripeSubscriptionId || typeof user?.stripeCustomerId !== "string") return res.status(409).json({ error: "A confirmed weekly plan is required to manage its payment method" });
+    const { url, defaultMethodId } = await createPaymentMethodPortalSession({ subscriptionId: plan.stripeSubscriptionId, planId: plan.id, userId, customerId: user.stripeCustomerId });
+    await saveUser(userId, { paymentMethodPortalBaselineId: defaultMethodId, paymentMethodPortalPending: true });
+    return res.json({ url });
+  } catch (error) {
+    return res.status(502).json({ error: error instanceof Error ? error.message : "Unable to open payment method settings" });
+  }
+});
+
+app.post("/v1/billing/payment-method-sync", requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    if (config.PILEUP_MODE !== "live") return res.status(409).json({ error: "Payment method settings are unavailable in demo mode" });
+    const userId = getUserId(req);
+    const plan = await getCurrentPlan(userId);
+    const user = await getUser(userId);
+    if (!plan || (plan.status !== "live" && plan.status !== "paused") || !plan.stripeSubscriptionId || typeof user?.stripeCustomerId !== "string") return res.status(409).json({ error: "A confirmed weekly plan is required to update its payment method" });
+    if (user.paymentMethodPortalPending !== true || typeof user.paymentMethodPortalBaselineId !== "string") return res.status(409).json({ error: "Open payment method settings before updating the weekly plan" });
+    const changed = await syncBillingPaymentMethod({ subscriptionId: plan.stripeSubscriptionId, planId: plan.id, userId, customerId: user.stripeCustomerId, previousDefaultMethodId: user.paymentMethodPortalBaselineId });
+    if (changed) await saveUser(userId, { paymentMethodPortalPending: false });
+    return res.json({ changed });
+  } catch (error) {
+    return res.status(502).json({ error: error instanceof Error ? error.message : "Unable to update the weekly payment method" });
+  }
+});
+
+app.get("/v1/funding/latest", requireAuth, async (req: AuthenticatedRequest, res) => {
+  const cycle = await getLatestCycle(getUserId(req));
+  res.json({ cycle: cycle ?? null });
+});
+
 app.get("/v1/cards/current", requireAuth, async (req: AuthenticatedRequest, res) => {
   const card = await getCard(getUserId(req));
   res.json({ card: card ?? null });
+});
+
+app.get("/v1/identity/status", requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const userId = getUserId(req);
+    const user = await getUser(userId);
+    if (config.PILEUP_MODE === "live" && typeof user?.bridgeKycLinkId === "string") {
+      const link = await getBridgeKycLink(user.bridgeKycLinkId);
+      const status = identityStatusFromBridge(link);
+      await saveUser(userId, { kycStatus: status, ...(status === "approved" && link.customer_id ? { bridgeCustomerId: link.customer_id } : {}) });
+      return res.json({ status });
+    }
+    if (config.PILEUP_MODE === "live") return res.json({ status: "not_started" });
+    const status = user?.kycStatus;
+    return res.json({ status: status === "terms_pending" || status === "started" || status === "approved" || status === "pending" || status === "needs_information" || status === "unavailable" ? status : "not_started" });
+  } catch (error) {
+    return res.status(503).json({ error: error instanceof Error ? error.message : "Identity status unavailable" });
+  }
 });
 
 app.post("/v1/plans", requireAuth, async (req: AuthenticatedRequest, res) => {
@@ -78,13 +161,16 @@ app.post("/v1/plans", requireAuth, async (req: AuthenticatedRequest, res) => {
     const input = planSchema.parse(req.body);
     await respondToMutation(req, res, "plan_create", async () => {
       const userId = getUserId(req);
-      const weights = input.weights ?? [...basketRegistry];
+      if (await getActivePlan(userId)) throw new Error("An active weekly plan already exists; change it from your weekly plan screen");
+      if (await getPausedPlan(userId)) throw new Error("A paused weekly plan already exists; resume it from your weekly plan screen");
+      if ((await getCurrentPlan(userId))?.status === "pending_payment") throw new Error("A weekly payment is still being confirmed");
+      const weights = input.weights ?? weightsForMix(input.mix ?? "balanced");
       assertPlanInput(input.amountUsd, weights);
       assertConfiguredBasket(weights);
       const timestamp = new Date().toISOString();
       const plan = {
         id: randomUUID(), userId, amountUsd: input.amountUsd, interval: "week" as const, weights,
-        stripePriceId: stripePriceByAmount[input.amountUsd], status: "draft" as const, createdAt: timestamp, updatedAt: timestamp
+        status: "draft" as const, createdAt: timestamp, updatedAt: timestamp
       };
       await savePlan(plan);
       return { status: 201, body: { plan } };
@@ -94,17 +180,49 @@ app.post("/v1/plans", requireAuth, async (req: AuthenticatedRequest, res) => {
   }
 });
 
+app.patch("/v1/plans/:planId", requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const input = changePlanSchema.parse(req.body);
+    const weights = weightsForMix(input.mix);
+    assertPlanInput(input.amountUsd, weights);
+    assertConfiguredBasket(weights);
+    const key = idempotencyKey(req);
+    const plan = await beginPlanChange({ planId: String(req.params.planId), userId: getUserId(req), key, expectedUpdatedAt: input.expectedUpdatedAt, amountUsd: input.amountUsd, weights });
+    if (plan.lastChangeKey === key) return res.json({ plan });
+    if (plan.amountUsd === input.amountUsd && JSON.stringify(plan.weights) === JSON.stringify(weights)) {
+      await releasePlanChange(plan.id, key);
+      return res.json({ plan: { ...plan, pendingChange: undefined } });
+    }
+    const changed = await changeBillingSubscription({ subscriptionId: plan.stripeSubscriptionId!, userId: plan.userId, planId: plan.id, amountUsd: input.amountUsd, previousPriceId: plan.stripePriceId, idempotencyKey: key });
+    const updated = await finalizePlanChange({ planId: plan.id, key, priceId: changed.priceId, previousPriceId: changed.previousPriceId });
+    return res.json({ plan: updated });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to change weekly plan";
+    const status = message === "Plan not found" ? 404 : /Plan changed|Another plan change|Only a live|does not match|must be reconciled/.test(message) ? 409 : 400;
+    return res.status(status).json({ error: message });
+  }
+});
+
 app.post("/v1/plans/:planId/activate", requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     await respondToMutation(req, res, `plan_activate:${String(req.params.planId)}`, async () => {
+      const key = idempotencyKey(req);
       const plan = await getPlan(String(req.params.planId));
       if (!plan || plan.userId !== getUserId(req)) throw new Error("Plan not found");
+      if (plan.activationKey === key && plan.stripeSubscriptionId && (plan.status === "pending_payment" || plan.status === "live")) {
+        const checkout = await getBillingSubscriptionCheckout({ subscriptionId: plan.stripeSubscriptionId, userId: plan.userId, planId: plan.id });
+        return { status: 200, body: checkout };
+      }
+      if (plan.status !== "draft") throw new Error("Only a draft plan can be activated");
+      const existingLive = await getActivePlan(plan.userId);
+      if (existingLive) throw new Error("An active weekly plan already exists; change it from your weekly plan screen");
+      if (await getPausedPlan(plan.userId)) throw new Error("A paused weekly plan already exists; resume it from your weekly plan screen");
       const user = await getUser(plan.userId);
-      const checkout = await createBillingSubscription({ userId: plan.userId, planId: plan.id, priceId: plan.stripePriceId, stripeCustomerId: typeof user?.stripeCustomerId === "string" ? user.stripeCustomerId : undefined, email: typeof user?.email === "string" ? user.email : undefined, idempotencyKey: idempotencyKey(req) });
+      const checkout = await createBillingSubscription({ userId: plan.userId, planId: plan.id, amountUsd: plan.amountUsd, priceId: plan.stripePriceId, stripeCustomerId: typeof user?.stripeCustomerId === "string" ? user.stripeCustomerId : undefined, email: typeof user?.email === "string" ? user.email : undefined, idempotencyKey: key });
       await saveUser(plan.userId, { stripeCustomerId: checkout.customerId });
-      await savePlan({ ...plan, stripeSubscriptionId: checkout.subscriptionId, status: checkout.mode === "demo" ? "live" : "pending_payment", updatedAt: new Date().toISOString() });
+      await savePlan({ ...plan, activationKey: key, stripeSubscriptionId: checkout.subscriptionId, stripePriceId: checkout.priceId ?? plan.stripePriceId, status: checkout.mode === "demo" ? "live" : "pending_payment", updatedAt: new Date().toISOString() });
       return { status: 200, body: checkout };
-    });
+    }, true);
   } catch (error) {
     res.status(error instanceof Error && error.message === "Plan not found" ? 404 : 502).json({ error: error instanceof Error ? error.message : "Unable to create Stripe subscription" });
   }
@@ -112,14 +230,31 @@ app.post("/v1/plans/:planId/activate", requireAuth, async (req: AuthenticatedReq
 
 app.post("/v1/plans/:planId/pause", requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    await respondToMutation(req, res, `plan_pause:${String(req.params.planId)}`, async () => {
-      const plan = await getPlan(String(req.params.planId));
-      if (!plan || plan.userId !== getUserId(req)) throw new Error("Plan not found");
-      await savePlan({ ...plan, status: "paused", updatedAt: new Date().toISOString() });
-      return { status: 204, body: null };
-    });
+    const expectedUpdatedAt = z.object({ expectedUpdatedAt: z.string().min(1) }).parse(req.body).expectedUpdatedAt;
+    const key = idempotencyKey(req);
+    const plan = await beginPlanPause({ planId: String(req.params.planId), userId: getUserId(req), key, expectedUpdatedAt });
+    if (plan.lastPauseKey === key) return res.status(204).end();
+    await pauseBillingSubscription({ subscriptionId: plan.stripeSubscriptionId!, userId: plan.userId, planId: plan.id, priceId: plan.stripePriceId, idempotencyKey: key });
+    await finalizePlanPause(plan.id, key);
+    return res.status(204).end();
   } catch (error) {
-    res.status(error instanceof Error && error.message === "Plan not found" ? 404 : 400).json({ error: error instanceof Error ? error.message : "Unable to pause plan" });
+    const message = error instanceof Error ? error.message : "Unable to pause plan";
+    return res.status(message === "Plan not found" ? 404 : /Plan changed|Only a live|in progress|no longer matches|does not match|reconcile/.test(message) ? 409 : 400).json({ error: message });
+  }
+});
+
+app.post("/v1/plans/:planId/resume", requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const expectedUpdatedAt = z.object({ expectedUpdatedAt: z.string().min(1) }).parse(req.body).expectedUpdatedAt;
+    const key = idempotencyKey(req);
+    const plan = await beginPlanResume({ planId: String(req.params.planId), userId: getUserId(req), key, expectedUpdatedAt });
+    if (plan.lastResumeKey === key) return res.status(204).end();
+    await resumeBillingSubscription({ subscriptionId: plan.stripeSubscriptionId!, userId: plan.userId, planId: plan.id, priceId: plan.stripePriceId, idempotencyKey: key });
+    await finalizePlanResume(plan.id, key);
+    return res.status(204).end();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unable to resume plan";
+    return res.status(message === "Plan not found" ? 404 : /Plan changed|Only a paused|in progress|does not match|reconcile|no longer matches/.test(message) ? 409 : 400).json({ error: message });
   }
 });
 
@@ -140,15 +275,19 @@ app.get("/v1/health", requireAuth, async (req: AuthenticatedRequest, res) => {
 
 app.post("/v1/bridge/kyc-session", requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
+    if (config.PILEUP_MODE !== "live") return res.status(409).json({ error: "Hosted identity verification is unavailable in demo mode" });
     await respondToMutation(req, res, "bridge_kyc_session", async () => {
       const userId = getUserId(req);
-      const { card } = providers();
-      const session = await card.createKycSession(userId);
-      await saveUser(userId, { kycStatus: "pending", bridgeCustomerId: `demo_bridge_${userId}` });
-      return { status: 200, body: session };
-    });
+      const user = await getUser(userId);
+      const link = typeof user?.bridgeKycLinkId === "string"
+        ? await getBridgeKycLink(user.bridgeKycLinkId)
+        : await createBridgeKycLink({ userId, ...z.object({ fullName: z.string().trim().min(2).max(120), email: z.string().email() }).parse(req.body) });
+      const status = identityStatusFromBridge(link);
+      await saveUser(userId, { bridgeKycLinkId: link.id, kycStatus: status, ...(status === "approved" && link.customer_id ? { bridgeCustomerId: link.customer_id } : {}) });
+      return { status: 200, body: { tosUrl: link.tos_link, kycUrl: link.kyc_link, status } };
+    }, true);
   } catch (error) {
-    res.status(502).json({ error: error instanceof Error ? error.message : "Unable to start KYC" });
+    res.status(error instanceof z.ZodError ? 400 : 502).json({ error: error instanceof Error ? error.message : "Unable to start identity verification" });
   }
 });
 
@@ -157,11 +296,15 @@ app.post("/v1/cards", requireAuth, async (req: AuthenticatedRequest, res) => {
     await respondToMutation(req, res, "card_provision", async () => {
       const userId = getUserId(req);
       const user = await getUser(userId);
-      if (user?.kycStatus !== "approved" && process.env.PILEUP_MODE !== "demo") throw new Error("Bridge KYC approval required");
+      if (config.PILEUP_MODE === "live") {
+        if (typeof user?.bridgeKycLinkId !== "string" || !user.bridgeCustomerId) throw new Error("Bridge KYC approval required");
+        const link = await getBridgeKycLink(user.bridgeKycLinkId);
+        if (identityStatusFromBridge(link) !== "approved" || link.customer_id !== user.bridgeCustomerId) throw new Error("Bridge KYC approval required");
+      }
       const current = providers();
       const owner = await current.wallet.getAddress(userId);
       const result = await current.card.provision(userId, owner);
-      assertTransactionWithinPolicy(result.approvalTransaction, { owner, allowedKinds: ["bridge_delegate"], allowedProgramIds: ["bridge-card", "spl-token"], allowedMints: [current.usdcMint], maxInputAtomic: 100_000_000n });
+      assertTransactionWithinPolicy(result.approvalTransaction, { owner, allowedKinds: ["bridge_delegate"], allowedProgramIds: ["bridge-card", "spl-token"], allowedMints: [current.usdcMint], allowedRecipients: ["bridge-card"], maxInputAtomic: 100_000_000n });
       const approvalSignature = await current.wallet.signScoped(userId, result.approvalTransaction);
       const record = { userId, bridgeCustomerId: String(user?.bridgeCustomerId ?? `demo_bridge_${userId}`), bridgeCardAccountId: result.cardAccountId, status: "sandbox" as const, mode: "bridge_sandbox" as const, updatedAt: new Date().toISOString() };
       await saveCard(record);
@@ -190,25 +333,33 @@ app.post("/v1/cards/:cardId/freeze", requireAuth, async (req: AuthenticatedReque
 
 app.post("/v1/debt/repay", requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    const amountUsd = z.object({ amountUsd: z.number().positive().max(10_000) }).parse(req.body).amountUsd;
+    const amountUsd = z.object({ amountUsd: z.number().positive().max(10_000).refine((value) => Math.abs(value * 100 - Math.round(value * 100)) < 1e-8, "Use whole cents") }).parse(req.body).amountUsd;
     await respondToMutation(req, res, "debt_repay", async () => {
       const userId = getUserId(req);
       const current = providers();
       const owner = await current.wallet.getAddress(userId);
+      const health = await current.lend.getHealth(owner);
+      if (health.status === "stale") throw new Error("Balance is updating; refresh before repaying");
+      const availableToRepayUsd = Math.floor(Math.min(health.debtUsd, health.walletUsdcUsd) * 100) / 100;
+      if (amountUsd > availableToRepayUsd || availableToRepayUsd < 0.01) throw new Error("Repayment amount exceeds current debt or wallet USDC; refresh your balance");
       const atomic = BigInt(Math.round(amountUsd * 1_000_000));
-      const transaction = await current.lend.repayUsdc({ owner, amountAtomic: atomic });
+      const transaction = await current.lend.buildRepayUsdc({ owner, amountAtomic: atomic });
       assertTransactionWithinPolicy(transaction, {
         owner,
         allowedKinds: ["repay"],
         allowedProgramIds: ["kamino", "spl-token", "compute-budget"],
         allowedMints: [current.usdcMint],
+        allowedRecipients: ["kamino"],
         maxInputAtomic: atomic
       });
       const signed = await current.wallet.signScoped(userId, transaction);
-      return { status: 200, body: { signature: signed.signature, amountUsd, mode: current.mode } };
+      const submitted = await current.lend.submit({ transaction, signed });
+      await current.lend.confirm(submitted.signature);
+      return { status: 200, body: { signature: submitted.signature, amountUsd, mode: current.mode } };
     });
   } catch (error) {
-    res.status(502).json({ error: error instanceof Error ? error.message : "Unable to repay" });
+    const message = error instanceof Error ? error.message : "Unable to repay";
+    res.status(error instanceof z.ZodError ? 400 : /refresh before repaying|refresh your balance/.test(message) ? 409 : 502).json({ error: message });
   }
 });
 
