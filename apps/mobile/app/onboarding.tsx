@@ -1,19 +1,47 @@
-import { useMutation } from "@tanstack/react-query";
-import { router } from "expo-router";
-import { Check, Shield } from "lucide-react-native";
-import { useState } from "react";
-import { Text, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
-import { api } from "@/lib/api";
+import { router, useLocalSearchParams } from "expo-router";
+import { ArrowRight, Check } from "lucide-react-native";
+import { useCallback, useState } from "react";
+import { Pressable, View, useWindowDimensions } from "react-native";
+import { WeeklyAmountSlider } from "@/components/molecules/weekly-amount-slider";
+import { WeeklyForecast } from "@/components/organisms/weekly-forecast";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { useAppStore } from "@/stores/app-store";
+import { Screen } from "@/components/ui/screen";
+import { Body, Eyebrow, Text, Title } from "@/components/ui/text";
+import { useAppStore, type MixId } from "@/stores/app-store";
 
-const amounts = [30, 50, 100] as const;
+const mixes: { id: MixId; title: string; detail: string }[] = [{ id: "balanced", title: "A bit of both", detail: "Big tech + the whole market" }, { id: "market", title: "The whole market", detail: "A little of almost everything" }, { id: "tech", title: "Big tech", detail: "A focused, bumpier pile" }];
 export default function Onboarding() {
-  const [amount, setAmount] = useState<30 | 50 | 100>(50);
-  const setPlan = useAppStore((state) => state.setPlan);
-  const create = useMutation({ mutationFn: () => api.createPlan(amount), onSuccess: ({ plan }) => { setPlan(plan); router.replace("/home"); } });
-  return <SafeAreaView className="flex-1 bg-zinc-950 px-6"><View className="py-8"><Badge tone="neutral">STEP 1 OF 2</Badge><Text className="mt-4 text-3xl font-bold text-white">Set your weekly pile.</Text><Text className="mt-2 text-zinc-400">We buy the same 40/30/30 xStocks basket each funded cycle.</Text><View className="mt-8 flex-row gap-3">{amounts.map((value) => <Button key={value} variant={amount === value ? "primary" : "secondary"} className="flex-1" onPress={() => setAmount(value)}><Text className="font-semibold text-white">${value}</Text></Button>)}</View><Card className="mt-8 gap-4"><View className="flex-row items-center justify-between"><Text className="font-semibold text-white">SPYx</Text><Text className="text-zinc-300">40%</Text></View><View className="flex-row items-center justify-between"><Text className="font-semibold text-white">NVDAx</Text><Text className="text-zinc-300">30%</Text></View><View className="flex-row items-center justify-between"><Text className="font-semibold text-white">AAPLx</Text><Text className="text-zinc-300">30%</Text></View></Card><Card className="mt-4"><View className="flex-row gap-3"><Shield color="#A78BFA" /><Text className="flex-1 text-sm leading-5 text-zinc-300">Pileup targets a conservative LTV. It never automatically sells your collateral.</Text></View></Card><Button className="mt-8" disabled={create.isPending} onPress={() => create.mutate()}><Text className="font-semibold text-white">{create.isPending ? "Creating…" : "Continue"}</Text><Check size={16} color="white" /></Button>{create.error ? <Text className="mt-3 text-center text-red-300">{create.error.message}</Text> : null}</View></SafeAreaView>;
+  const { mode, planId, signedIn } = useLocalSearchParams<{ mode?: string; planId?: string; signedIn?: string }>();
+  const [step, setStep] = useState<1 | 2>(1);
+  const amount = useAppStore((s) => s.draftAmount);
+  const mix = useAppStore((s) => s.draftMix);
+  const setDraft = useAppStore((s) => s.setDraft);
+  const { height } = useWindowDimensions();
+  const topInset = Math.max(44, Math.min(64, height - 780));
+  const changeAmount = useCallback((draftAmount: number) => setDraft({ draftAmount }), [setDraft]);
+
+  return <Screen className="pt-0" footer={<Button onPress={() => step === 1 ? setStep(2) : mode === "edit" && planId ? router.push({ pathname: "/plan", params: { mode: "edit", planId } }) : signedIn === "1" ? router.push("/plan") : router.push("/sign-in")}><View className="w-full flex-row items-center justify-between"><Text className="font-semibold text-white">{step === 1 ? "Choose my mix" : "Save my pile"}</Text><ArrowRight size={21} color="#FAFAF8" /></View></Button>}>
+    <View style={{ paddingTop: topInset }}>
+      <Eyebrow className="text-[12px] tracking-normal">{step} OF 4 · {step === 1 ? "AMOUNT" : "MIX"}</Eyebrow>
+      <Title className="mt-[23px] text-[36px] font-semibold leading-[44px]">{step === 1 ? "Choose your\nweekly amount." : "What goes\nin your pile?"}</Title>
+      <Body className="mt-[7px] max-w-[320px] text-[15px] leading-[18px]">{step === 1 ? "Slide to see how a small weekly habit could grow over time." : "Choose a simple mix. Tap a choice to see the holdings and costs."}</Body>
+      {step === 1 ? <>
+        <View className="mt-[28px]"><WeeklyForecast amountUsd={amount} /></View>
+        <Eyebrow className="mt-[30px] text-[12px] tracking-normal">EACH WEEK</Eyebrow>
+        <View className="mt-[5px] flex-row items-end"><Text className="text-[62px] font-semibold leading-[75px]">${amount}</Text><Text className="mb-[10px] ml-7 text-[15px] text-pile-muted">every week</Text></View>
+        <View className="mt-[13px]"><WeeklyAmountSlider amountUsd={amount} onChange={changeAmount} /></View>
+      </> : <View className="mt-[46px] gap-[17px]">{mixes.map((option, index) => <MixChoice key={option.id} option={option} stones={3 + (index === 1 ? 1 : index === 2 ? -1 : 0)} selected={mix === option.id} onPress={() => setDraft({ draftMix: option.id })} />)}</View>}
+    </View>
+  </Screen>;
+}
+
+function MixChoice({ option, stones, selected, onPress }: { option: { id: MixId; title: string; detail: string }; stones: number; selected: boolean; onPress: () => void }) {
+  return <Pressable accessibilityRole="radio" accessibilityState={{ selected }} onPress={onPress} className={`h-[119px] w-full rounded-[22px] p-5 ${selected ? "bg-pile-ink" : "bg-pile-fog"}`}>
+    <Text className={`text-[17px] font-semibold ${selected ? "text-pile-paper" : "text-pile-ink"}`}>{option.title}</Text>
+    <Text className={`mt-[7px] text-[13px] ${selected ? "text-pile-stone" : "text-pile-muted"}`}>{option.detail}</Text>
+    <View pointerEvents="none" className="absolute right-5 top-5 h-[76px] w-[80px]">
+      {Array.from({ length: stones }, (_, index) => <View key={index} className="absolute h-[42px] w-[30px] rounded-full" style={{ right: 24 - index * 11, top: 21 - index * 7, transform: [{ rotate: index % 2 ? "8deg" : "-7deg" }], backgroundColor: selected ? (index === stones - 1 ? "#BDBDB5" : "#D9D8D2") : "#D9D8D2" }} />)}
+      {selected ? <View className="absolute right-0 top-[-5px] h-[26px] w-[26px] items-center justify-center rounded-full" style={{ backgroundColor: "#BDBDB5" }}><Check size={14} color="#111110" /></View> : null}
+    </View>
+  </Pressable>;
 }
