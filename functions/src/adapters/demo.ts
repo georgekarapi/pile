@@ -51,29 +51,36 @@ export class DemoLendAdapter implements LendPort {
     return created;
   }
 
-  async deposit(input: { owner: string; mint: string; amountAtomic: bigint }) {
-    // Demo swaps use USDC atomic precision and a 1:1 quote. Live state always
-    // comes from Kamino rather than this simulation.
-    this.position(input.owner).collateralUsd += Number(input.amountAtomic) / 1_000_000;
+  async buildDeposit(input: { owner: string; mint: string; amountAtomic: bigint }) {
     return transaction({ summary: `Deposit ${input.amountAtomic} of ${input.mint} into Kamino for ${input.owner}`, kind: "deposit", owner: input.owner, programIds: ["kamino", "spl-token", "compute-budget"], mints: [input.mint], inputAtomic: input.amountAtomic, recipients: ["kamino"] });
   }
 
-  async borrowUsdc(input: { owner: string; amountAtomic: bigint }) {
-    const amountUsd = Number(input.amountAtomic) / 1_000_000;
-    const position = this.position(input.owner);
-    position.debtUsd += amountUsd;
-    position.walletUsdcUsd += amountUsd;
-    return transaction({ summary: `Borrow ${input.amountAtomic} USDC atomic units from Kamino for ${input.owner}`, kind: "borrow", owner: input.owner, programIds: ["kamino", "spl-token", "compute-budget"], mints: ["USDC"], recipients: [input.owner] });
+  async buildBorrowUsdc(input: { owner: string; amountAtomic: bigint }) {
+    return transaction({ summary: `Borrow ${input.amountAtomic} USDC atomic units from Kamino for ${input.owner}`, kind: "borrow", owner: input.owner, programIds: ["kamino", "spl-token", "compute-budget"], mints: ["USDC"], inputAtomic: input.amountAtomic, recipients: [input.owner] });
   }
 
-  async repayUsdc(input: { owner: string; amountAtomic: bigint }) {
-    const amountUsd = Number(input.amountAtomic) / 1_000_000;
-    const position = this.position(input.owner);
-    const repayUsd = Math.min(amountUsd, position.debtUsd, position.walletUsdcUsd);
-    position.debtUsd -= repayUsd;
-    position.walletUsdcUsd -= repayUsd;
+  async buildRepayUsdc(input: { owner: string; amountAtomic: bigint }) {
     return transaction({ summary: `Repay ${input.amountAtomic} USDC atomic units to Kamino for ${input.owner}`, kind: "repay", owner: input.owner, programIds: ["kamino", "spl-token", "compute-budget"], mints: ["USDC"], inputAtomic: input.amountAtomic, recipients: ["kamino"] });
   }
+
+  async submit(input: { transaction: UnsignedTransaction; signed: { signature: string } }) {
+    const intent = input.transaction.intent;
+    const amountUsd = Number(intent.inputAtomic ?? 0n) / 1_000_000;
+    const position = this.position(intent.owner);
+    if (intent.kind === "deposit") position.collateralUsd += amountUsd;
+    if (intent.kind === "borrow") {
+      position.debtUsd += amountUsd;
+      position.walletUsdcUsd += amountUsd;
+    }
+    if (intent.kind === "repay") {
+      if (amountUsd > position.debtUsd + 0.000001 || amountUsd > position.walletUsdcUsd + 0.000001) throw new Error("Demo repayment exceeds current debt or wallet USDC");
+      position.debtUsd = Math.max(0, position.debtUsd - amountUsd);
+      position.walletUsdcUsd = Math.max(0, position.walletUsdcUsd - amountUsd);
+    }
+    return { signature: input.signed.signature };
+  }
+
+  async confirm(_signature: string) { return; }
 
   async getHealth(owner: string) {
     const position = this.position(owner);
