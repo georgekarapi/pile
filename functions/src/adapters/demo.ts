@@ -1,5 +1,5 @@
-import type { CardPort, FundingPort, LendPort, SwapPort, TransactionKind, UnsignedTransaction, WalletPort } from "@pileup/shared";
-import { computeHealth } from "@pileup/shared";
+import type { CardPort, FundingPort, LendPort, SwapPort, TransactionKind, UnsignedTransaction, WalletPort } from "@pile/shared";
+import { computeHealth } from "@pile/shared";
 import { config } from "../config.js";
 import { reserveDemoCredit } from "../repository.js";
 
@@ -19,13 +19,13 @@ export class DemoWalletAdapter implements WalletPort {
 
 export class DemoFundingAdapter implements FundingPort {
   async creditDemoUsdc(input: { userId: string; destination: string; amountUsd: number; idempotencyKey: string }) {
-    if (config.PILEUP_MODE !== "demo" || config.PILEUP_TREASURY_ENABLED !== "true") throw new Error("Demo treasury is disabled");
+    if (config.PILE_MODE !== "demo" || config.PILE_TREASURY_ENABLED !== "true") throw new Error("Demo treasury is disabled");
     await reserveDemoCredit({
       userId: input.userId,
       cycleId: input.idempotencyKey,
       amountUsd: input.amountUsd,
-      globalCapUsd: config.PILEUP_DEMO_GLOBAL_CAP_USD,
-      walletCapUsd: config.PILEUP_DEMO_WALLET_CAP_USD
+      globalCapUsd: config.PILE_DEMO_GLOBAL_CAP_USD,
+      walletCapUsd: config.PILE_DEMO_WALLET_CAP_USD
     });
     return { signature: `demo-credit-${input.idempotencyKey}`, atomicAmount: BigInt(Math.round(input.amountUsd * 1_000_000)) };
   }

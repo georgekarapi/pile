@@ -1,17 +1,17 @@
 {
   "expo": {
-    "name": "Pileup",
-    "slug": "pileup",
-    "scheme": "pileup",
+    "name": "Pile",
+    "slug": "pile",
+    "scheme": "pile",
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
     "ios": {
-      "bundleIdentifier": "com.pileup.app",
+      "bundleIdentifier": "com.pile.app",
       "usesAppleSignIn": true
     },
     "android": {
-      "package": "com.pileup.app"
+      "package": "com.pile.app"
     },
     "plugins": [
       "expo-router",
@@ -19,7 +19,7 @@
       [
         "@stripe/stripe-react-native",
         {
-          "merchantIdentifier": "merchant.com.pileup.app",
+          "merchantIdentifier": "merchant.com.pile.app",
           "enableGooglePay": false
         }
       ]

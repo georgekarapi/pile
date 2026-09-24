@@ -35,7 +35,7 @@ export async function createBridgeKycLink(input: { userId: string; fullName: str
   const hash = createHash("sha256").update(`${input.userId}\u0000${input.fullName.trim().toLowerCase()}\u0000${input.email.trim().toLowerCase()}`).digest("hex");
   return bridgeRequest("/kyc_links", {
     method: "POST",
-    headers: { "Idempotency-Key": `pileup-kyc-${hash}` },
+    headers: { "Idempotency-Key": `pile-kyc-${hash}` },
     body: JSON.stringify({ full_name: input.fullName.trim(), email: input.email.trim().toLowerCase(), type: "individual" })
   });
 }

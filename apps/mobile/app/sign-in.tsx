@@ -108,7 +108,7 @@ function SignInContent({ step, email, code = "", error, busy = false, preview = 
     <Body className="mt-4 text-[16px] leading-[22px]">We’ll email a one-time code. No password or seed phrase.</Body>
     <TextInput className="mt-4 h-[58px] rounded-[18px] bg-pile-fog px-4 text-pile-ink" placeholder="ari@example.com" placeholderTextColor="#8A8984" autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} />
     <View className="mt-4 rounded-[18px] bg-pile-fog p-4"><Text className="text-[14px] font-semibold">Your choices are saved</Text><Text className="mt-1 text-[13px] text-pile-muted">${amount} each week · {mixLabel}</Text></View>
-    <Text className="mt-4 text-[13px] text-pile-muted">A secure wallet is created for your Pileup account.</Text>
+    <Text className="mt-4 text-[13px] text-pile-muted">A secure wallet is created for your Pile account.</Text>
     {preview ? <Text className="mt-4 text-xs text-pile-muted">Expo Go previews the flow without sending a code.</Text> : null}
     {error ? <Text className="mt-4 text-sm">{error}</Text> : null}
   </View></Screen>;

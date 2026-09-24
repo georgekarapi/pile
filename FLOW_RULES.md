@@ -1,4 +1,4 @@
-# Pileup flow rules
+# Pile flow rules
 
 These rules are product invariants. A UI convenience, adapter change, or demo
 shortcut must not bypass them.

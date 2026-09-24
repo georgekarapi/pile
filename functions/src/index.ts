@@ -32,5 +32,5 @@ export const refreshHealth = onSchedule({ schedule: "every 5 minutes", region: "
       frozen += 1;
     }
   }
-  console.info("Pileup health refresh completed", { mode: current.mode, plans: plans.length, frozen });
+  console.info("Pile health refresh completed", { mode: current.mode, plans: plans.length, frozen });
 });

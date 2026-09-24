@@ -2,7 +2,7 @@ import type { Request, Response } from "express";
 import { createHash } from "node:crypto";
 import { getFunctions } from "firebase-admin/functions";
 import Stripe from "stripe";
-import type { FundingCycle } from "@pileup/shared";
+import type { BasketWeight, FundingCycle } from "@pile/shared";
 import { cancelPlan, claimWebhook, confirmPlanInvoicePayment, getCycle, getPlan, recordPlanPaymentIssue, saveCycle, updateWebhookState } from "../repository.js";
 import { config } from "../config.js";
 
@@ -54,7 +54,7 @@ async function enqueueFundingCycle(cycleId: string): Promise<void> {
 
 export async function stripeWebhook(req: Request, res: Response) {
   let event: StripeInvoiceEvent;
-  if (config.PILEUP_MODE === "live") {
+  if (config.PILE_MODE === "live") {
     const signature = req.header("stripe-signature");
     if (!config.STRIPE_SECRET_KEY || !config.STRIPE_WEBHOOK_SECRET || !signature) return res.status(400).json({ error: "Stripe signature configuration missing" });
     try {
@@ -71,9 +71,9 @@ export async function stripeWebhook(req: Request, res: Response) {
 
   if (event.type === "customer.subscription.deleted") {
     const subscription = event.data.object as unknown as Stripe.Subscription;
-    const planId = subscription.metadata?.pileupPlanId;
-    const userId = subscription.metadata?.pileupUserId;
-    if (!planId || !userId) return res.status(400).json({ error: "Subscription lacks immutable Pile Up metadata" });
+    const planId = subscription.metadata?.pilePlanId ?? subscription.metadata?.pileupPlanId;
+    const userId = subscription.metadata?.pileUserId ?? subscription.metadata?.pileupUserId;
+    if (!planId || !userId) return res.status(400).json({ error: "Subscription lacks immutable Pile metadata" });
     await cancelPlan({ planId, userId, subscriptionId: subscription.id });
     const claim = await claimWebhook(event.id, "stripe");
     await updateWebhookState(event.id, "stripe", "processed", { subscriptionId: subscription.id, status: "cancelled" });
@@ -82,15 +82,15 @@ export async function stripeWebhook(req: Request, res: Response) {
 
   const invoice = event.data.object;
   const context = subscriptionContext(invoice);
-  const planId = context.metadata.pileupPlanId;
-  const userId = context.metadata.pileupUserId;
-  if (!planId || !userId || !context.subscriptionId) return res.status(400).json({ error: "Invoice lacks immutable Pile Up subscription metadata" });
+  const planId = context.metadata.pilePlanId ?? context.metadata.pileupPlanId;
+  const userId = context.metadata.pileUserId ?? context.metadata.pileupUserId;
+  if (!planId || !userId || !context.subscriptionId) return res.status(400).json({ error: "Invoice lacks immutable Pile subscription metadata" });
 
   const plan = await getPlan(planId);
-  if (!plan || plan.userId !== userId || plan.stripeSubscriptionId !== context.subscriptionId) return res.status(409).json({ error: "Invoice does not match its Pile Up plan" });
+  if (!plan || plan.userId !== userId || plan.stripeSubscriptionId !== context.subscriptionId) return res.status(409).json({ error: "Invoice does not match its Pile plan" });
   if (event.type !== "invoice.payment_succeeded") {
     if (invoice.collection_method !== "charge_automatically" || invoice.currency !== "usd") return res.status(409).json({ error: "Invoice is not an automatically collected USD payment" });
-    if (config.PILEUP_MODE === "live") {
+    if (config.PILE_MODE === "live") {
       if (!event.livemode) return res.status(409).json({ error: "Test-mode Stripe event rejected in live mode" });
       const stripe = new Stripe(config.STRIPE_SECRET_KEY!);
       const [latestInvoice, subscription] = await Promise.all([stripe.invoices.retrieve(invoice.id), stripe.subscriptions.retrieve(context.subscriptionId)]);
@@ -109,7 +109,7 @@ export async function stripeWebhook(req: Request, res: Response) {
   const matches = priceId ? revisions.filter((revision) => revision.stripePriceId === priceId) : revisions.filter((revision) => invoice.amount_paid === revision.amountUsd * 100);
   if (invoice.currency !== "usd" || matches.length !== 1 || invoice.amount_paid !== matches[0].amountUsd * 100) return res.status(409).json({ error: "Invoice price, currency or amount does not match a unique plan revision" });
   const invoiceWeights = matches[0].weights;
-  if (config.PILEUP_MODE === "live" && !event.livemode) return res.status(409).json({ error: "Test-mode Stripe event rejected in live mode" });
+  if (config.PILE_MODE === "live" && !event.livemode) return res.status(409).json({ error: "Test-mode Stripe event rejected in live mode" });
   await confirmPlanInvoicePayment({ planId, userId, subscriptionId: context.subscriptionId, invoiceId: invoice.id });
 
   const claim = await claimWebhook(event.id, "stripe");
@@ -125,7 +125,7 @@ export async function stripeWebhook(req: Request, res: Response) {
       fiatCurrency: invoice.currency,
       sourceEventId: event.id,
       state: "invoice_paid",
-      legs: invoiceWeights.map((weight) => ({ mint: weight.mint, symbol: weight.symbol, bps: weight.bps, inputUsdcAtomic: "0", status: "pending" })),
+      legs: invoiceWeights.map((weight: BasketWeight) => ({ mint: weight.mint, symbol: weight.symbol, bps: weight.bps, inputUsdcAtomic: "0", status: "pending" })),
       depositSignatures: [],
       attempts: 0,
       createdAt: timestamp,

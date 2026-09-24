@@ -1,4 +1,4 @@
-import type { CardRecord, FundingCycle, Health, Plan } from "@pileup/shared";
+import type { CardRecord, FundingCycle, Health, Plan } from "@pile/shared";
 import Constants from "expo-constants";
 
 const baseUrl = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:5001/YOUR_PROJECT/europe-west1/api";
@@ -17,7 +17,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     headers: {
       "Content-Type": "application/json",
-      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : { "x-pileup-demo-user": demoUser }),
+      ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : { "x-pile-demo-user": demoUser }),
       ...(init?.headers ?? {})
     }
   });

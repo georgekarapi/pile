@@ -1,4 +1,4 @@
-# Pileup
+# Pile
 
 Keep the pile. Spend the overflow.
 
@@ -10,9 +10,9 @@ Keep the pile. Spend the overflow.
 
 ## Operating modes
 
-`PILEUP_MODE=demo` is the only safe default. It uses deterministic transaction adapters and requires `PILEUP_TREASURY_ENABLED=true` before a demo credit can proceed.
+`PILE_MODE=demo` is the only safe default. It uses deterministic transaction adapters and requires `PILE_TREASURY_ENABLED=true` before a demo credit can proceed.
 
-`PILEUP_MODE=live` rejects unsigned Stripe webhooks and unverified mobile requests. Before enabling it, configure real mint addresses, Kamino market, Privy verification credentials, Bridge program values, Stripe prices, a hardware-secured treasury, and provider approvals.
+`PILE_MODE=live` rejects unsigned Stripe webhooks and unverified mobile requests. Before enabling it, configure real mint addresses, Kamino market, Privy verification credentials, Bridge program values, Stripe prices, a hardware-secured treasury, and provider approvals.
 
 ## Local setup
 
@@ -22,8 +22,8 @@ Keep the pile. Spend the overflow.
 4. Run `pnpm install` (the root `packageManager` field pins pnpm 12.4.2).
 5. Run `pnpm test` and `pnpm typecheck`.
 6. Start emulators with `pnpm dlx firebase-tools emulators:start` after configuring a Firebase project.
-7. Copy `apps/mobile/.env.example` to `apps/mobile/.env`, then start the development client with `pnpm --filter @pileup/mobile start`.
-8. Verify the production iOS JavaScript bundle with `pnpm --filter @pileup/mobile export:ios`.
+7. Copy `apps/mobile/.env.example` to `apps/mobile/.env`, then start the development client with `pnpm --filter @pile/mobile start`.
+8. Verify the production iOS JavaScript bundle with `pnpm --filter @pile/mobile export:ios`.
 
 All money-moving adapters default to explicit demo mode. Never add treasury keys or provider secrets to the mobile app.
 
@@ -36,7 +36,7 @@ configuration, and Hermes transform profile required by the current Expo SDK.
 - Stripe webhooks validate immutable subscription identity and enqueue work; a task worker submits and confirms each on-chain lending action.
 - Firestore is never an account ledger; Solana and Kamino are the balance/risk source of truth.
 - The delegated signer may use only configured programs and mints, within the cycle cap, and may borrow only to the user wallet.
-- The card spends existing USDC. Pileup does not borrow in the card authorization path and never auto-sells xStocks.
+- The card spends existing USDC. Pile does not borrow in the card authorization path and never auto-sells xStocks.
 - Jupiter uses Swap V2's short-lived `/order` → sign → `/execute` flow; every assembled transaction is policy-checked before it reaches a signer.
 
 See [FLOW_RULES.md](FLOW_RULES.md) for the product-flow rules enforced by the

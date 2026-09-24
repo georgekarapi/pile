@@ -1,5 +1,5 @@
 import { Text, View } from "react-native";
-import type { BasketWeight } from "@pileup/shared";
+import type { BasketWeight } from "@pile/shared";
 
 const colors = ["bg-violet-400", "bg-fuchsia-400", "bg-indigo-300"];
 export function PileStack({ weights, valueUsd, bufferUsd }: { weights: BasketWeight[]; valueUsd: number; bufferUsd: number }) {

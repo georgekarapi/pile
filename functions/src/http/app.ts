@@ -1,7 +1,7 @@
 import cors from "cors";
 import express from "express";
 import { randomUUID } from "node:crypto";
-import { assertPlanInput, assertTransactionWithinPolicy } from "@pileup/shared";
+import { assertPlanInput, assertTransactionWithinPolicy } from "@pile/shared";
 import { z } from "zod";
 import { allowedOrigins, basketRegistry, config } from "../config.js";
 import { getUserId, requireAuth, type AuthenticatedRequest } from "../auth.js";
@@ -78,7 +78,7 @@ app.use(cors({
 }));
 app.use(express.json());
 
-app.get("/v1/healthz", (_req, res) => res.json({ ok: true, mode: process.env.PILEUP_MODE ?? "demo" }));
+app.get("/v1/healthz", (_req, res) => res.json({ ok: true, mode: process.env.PILE_MODE ?? process.env.PILEUP_MODE ?? "demo" }));
 
 app.get("/v1/plans/current", requireAuth, async (req: AuthenticatedRequest, res) => {
   const plan = await getCurrentPlan(getUserId(req));
@@ -99,7 +99,7 @@ app.post("/v1/billing/retry-checkout", requireAuth, async (req: AuthenticatedReq
 
 app.post("/v1/billing/payment-method-session", requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    if (config.PILEUP_MODE !== "live") return res.status(409).json({ error: "Payment method settings are unavailable in demo mode" });
+    if (config.PILE_MODE !== "live") return res.status(409).json({ error: "Payment method settings are unavailable in demo mode" });
     const userId = getUserId(req);
     const plan = await getCurrentPlan(userId);
     const user = await getUser(userId);
@@ -114,7 +114,7 @@ app.post("/v1/billing/payment-method-session", requireAuth, async (req: Authenti
 
 app.post("/v1/billing/payment-method-sync", requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    if (config.PILEUP_MODE !== "live") return res.status(409).json({ error: "Payment method settings are unavailable in demo mode" });
+    if (config.PILE_MODE !== "live") return res.status(409).json({ error: "Payment method settings are unavailable in demo mode" });
     const userId = getUserId(req);
     const plan = await getCurrentPlan(userId);
     const user = await getUser(userId);
@@ -142,13 +142,13 @@ app.get("/v1/identity/status", requireAuth, async (req: AuthenticatedRequest, re
   try {
     const userId = getUserId(req);
     const user = await getUser(userId);
-    if (config.PILEUP_MODE === "live" && typeof user?.bridgeKycLinkId === "string") {
+    if (config.PILE_MODE === "live" && typeof user?.bridgeKycLinkId === "string") {
       const link = await getBridgeKycLink(user.bridgeKycLinkId);
       const status = identityStatusFromBridge(link);
       await saveUser(userId, { kycStatus: status, ...(status === "approved" && link.customer_id ? { bridgeCustomerId: link.customer_id } : {}) });
       return res.json({ status });
     }
-    if (config.PILEUP_MODE === "live") return res.json({ status: "not_started" });
+    if (config.PILE_MODE === "live") return res.json({ status: "not_started" });
     const status = user?.kycStatus;
     return res.json({ status: status === "terms_pending" || status === "started" || status === "approved" || status === "pending" || status === "needs_information" || status === "unavailable" ? status : "not_started" });
   } catch (error) {
@@ -275,7 +275,7 @@ app.get("/v1/health", requireAuth, async (req: AuthenticatedRequest, res) => {
 
 app.post("/v1/bridge/kyc-session", requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
-    if (config.PILEUP_MODE !== "live") return res.status(409).json({ error: "Hosted identity verification is unavailable in demo mode" });
+    if (config.PILE_MODE !== "live") return res.status(409).json({ error: "Hosted identity verification is unavailable in demo mode" });
     await respondToMutation(req, res, "bridge_kyc_session", async () => {
       const userId = getUserId(req);
       const user = await getUser(userId);
@@ -296,7 +296,7 @@ app.post("/v1/cards", requireAuth, async (req: AuthenticatedRequest, res) => {
     await respondToMutation(req, res, "card_provision", async () => {
       const userId = getUserId(req);
       const user = await getUser(userId);
-      if (config.PILEUP_MODE === "live") {
+      if (config.PILE_MODE === "live") {
         if (typeof user?.bridgeKycLinkId !== "string" || !user.bridgeCustomerId) throw new Error("Bridge KYC approval required");
         const link = await getBridgeKycLink(user.bridgeKycLinkId);
         if (identityStatusFromBridge(link) !== "approved" || link.customer_id !== user.bridgeCustomerId) throw new Error("Bridge KYC approval required");

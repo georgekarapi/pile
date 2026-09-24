@@ -1,6 +1,6 @@
 import { FieldValue, getFirestore } from "firebase-admin/firestore";
 import { createHash } from "node:crypto";
-import type { BasketWeight, CardRecord, FundingCycle, Plan } from "@pileup/shared";
+import type { BasketWeight, CardRecord, FundingCycle, Plan } from "@pile/shared";
 
 const db = () => getFirestore();
 const now = () => new Date().toISOString();

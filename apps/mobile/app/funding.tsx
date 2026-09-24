@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useStripe } from "@stripe/stripe-react-native";
-import type { FundingCycle, FundingState, Plan } from "@pileup/shared";
+import type { FundingCycle, FundingState, Plan } from "@pile/shared";
 import Constants from "expo-constants";
 import { router, useLocalSearchParams } from "expo-router";
 import { Alert, Pressable, View } from "react-native";
@@ -76,7 +76,7 @@ function FirstPaymentIssue({ plan }: { plan: Plan }) {
   const retry = useMutation({ mutationFn: async () => {
     const checkout = await api.retryCheckout();
     if (checkout.mode !== "live" || !checkout.clientSecret || !checkout.ephemeralKey) throw new Error("Payment setup is unavailable. Please try again later.");
-    const initialized = await initPaymentSheet({ merchantDisplayName: "Pileup", paymentIntentClientSecret: checkout.clientSecret, customerId: checkout.customerId, customerEphemeralKeySecret: checkout.ephemeralKey, returnURL: "pileup://stripe-redirect" });
+    const initialized = await initPaymentSheet({ merchantDisplayName: "Pile", paymentIntentClientSecret: checkout.clientSecret, customerId: checkout.customerId, customerEphemeralKeySecret: checkout.ephemeralKey, returnURL: "pile://stripe-redirect" });
     if (initialized.error) throw new Error(initialized.error.message);
     const presented = await presentPaymentSheet();
     if (presented.error) throw new Error(presented.error.message);

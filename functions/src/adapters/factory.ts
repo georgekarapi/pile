@@ -1,4 +1,4 @@
-import type { CardPort, FundingPort, LendPort, SwapPort, WalletPort } from "@pileup/shared";
+import type { CardPort, FundingPort, LendPort, SwapPort, WalletPort } from "@pile/shared";
 import { config } from "../config.js";
 import { DemoCardAdapter, DemoFundingAdapter, DemoLendAdapter, DemoSwapAdapter, DemoWalletAdapter } from "./demo.js";
 import { JupiterSwapAdapter } from "./jupiter.js";
@@ -21,13 +21,13 @@ export type ProviderSet = {
  * a simulated money movement.
  */
 export function providers(): ProviderSet {
-  if (config.PILEUP_MODE === "demo") return {
+  if (config.PILE_MODE === "demo") return {
     wallet: new DemoWalletAdapter(), funding: new DemoFundingAdapter(), swap: new DemoSwapAdapter(), lend: new DemoLendAdapter(), card: new DemoCardAdapter(), usdcMint: "USDC", mode: "demo"
   };
   throw new Error("Live provider set requires the Privy, treasury, Kamino, and Bridge adapters to be configured");
 }
 
 export function liveJupiterSwap(): SwapPort {
-  if (config.PILEUP_MODE !== "live") throw new Error("Jupiter live adapter is unavailable in demo mode");
+  if (config.PILE_MODE !== "live") throw new Error("Jupiter live adapter is unavailable in demo mode");
   return new JupiterSwapAdapter();
 }

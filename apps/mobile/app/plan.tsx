@@ -69,7 +69,7 @@ function NativePlan() {
     const checkout = await api.activatePlan(activePlan.id);
     if (checkout.mode === "live") {
       if (!checkout.clientSecret || !checkout.ephemeralKey) throw new Error("Payment setup is incomplete");
-      const initialized = await initPaymentSheet({ merchantDisplayName: "Pileup", paymentIntentClientSecret: checkout.clientSecret, customerId: checkout.customerId, customerEphemeralKeySecret: checkout.ephemeralKey, returnURL: "pileup://stripe-redirect" });
+      const initialized = await initPaymentSheet({ merchantDisplayName: "Pile", paymentIntentClientSecret: checkout.clientSecret, customerId: checkout.customerId, customerEphemeralKeySecret: checkout.ephemeralKey, returnURL: "pile://stripe-redirect" });
       if (initialized.error) throw new Error(initialized.error.message);
       const presented = await presentPaymentSheet();
       if (presented.error) throw new Error(presented.error.message);

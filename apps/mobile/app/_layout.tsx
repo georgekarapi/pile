@@ -32,7 +32,7 @@ function NativeProviders({ children, client }: { children: ReactNode; client: Qu
   };
 
   return <PrivyProvider appId={process.env.EXPO_PUBLIC_PRIVY_APP_ID ?? "configure-privy-app-id"} clientId={process.env.EXPO_PUBLIC_PRIVY_CLIENT_ID ?? "configure-privy-client-id"}>
-    <StripeProvider publishableKey={process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "pk_test_configure_me"} urlScheme="pileup">
+    <StripeProvider publishableKey={process.env.EXPO_PUBLIC_STRIPE_PUBLISHABLE_KEY ?? "pk_test_configure_me"} urlScheme="pile">
       <ApiAuthBridge>{children}</ApiAuthBridge>
     </StripeProvider>
   </PrivyProvider>;
@@ -41,7 +41,7 @@ function NativeProviders({ children, client }: { children: ReactNode; client: Qu
 function AppProviders({ children, client }: { children: ReactNode; client: QueryClient }) {
   if (Constants.appOwnership === "expo") {
     // Expo Go is a design/demo surface. Auth and card payment stay unavailable
-    // there; use `pnpm --filter @pileup/mobile run start:dev-client` for them.
+    // there; use `pnpm --filter @pile/mobile run start:dev-client` for them.
     return children;
   }
 
@@ -50,5 +50,5 @@ function AppProviders({ children, client }: { children: ReactNode; client: Query
 
 export default function RootLayout() {
   const [client] = useState(() => new QueryClient());
-  return <AppProviders client={client}><QueryClientProvider client={client}><StatusBar style="dark" /><Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "#FAFAF8" }, animation: "slide_from_right" }} /></QueryClientProvider></AppProviders>;
+  return <AppProviders client={client}><QueryClientProvider client={client}><StatusBar style="dark" /><Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: "#FAFAF8" }, animation: "ios_from_right" }} /></QueryClientProvider></AppProviders>;
 }

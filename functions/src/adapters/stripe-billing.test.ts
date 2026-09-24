@@ -37,9 +37,9 @@ vi.mock("stripe", () => {
 
 vi.mock("../config.js", () => ({
   config: {
-    PILEUP_MODE: "live",
+    PILE_MODE: "live",
     STRIPE_SECRET_KEY: "sk_test_mock",
-    PILEUP_STRIPE_PRODUCT_ID: "prod_123"
+    PILE_STRIPE_PRODUCT_ID: "prod_123"
   }
 }));
 
@@ -55,7 +55,7 @@ describe("stripe billing checkout recovery", () => {
     mockRetrieve.mockResolvedValue({
       id: "sub_123",
       customer: "cus_123",
-      metadata: { pileupUserId: "user_1", pileupPlanId: "plan_1" },
+      metadata: { pileUserId: "user_1", pilePlanId: "plan_1" },
       items: { data: [{ price: { id: "price_1" } }] },
       latest_invoice: {
         id: "in_1",
@@ -78,7 +78,7 @@ describe("stripe billing checkout recovery", () => {
     mockRetrieve.mockResolvedValue({
       id: "sub_123",
       customer: "cus_123",
-      metadata: { pileupUserId: "user_1", pileupPlanId: "plan_1" },
+      metadata: { pileUserId: "user_1", pilePlanId: "plan_1" },
       items: { data: [{ price: { id: "price_1" } }] },
       latest_invoice: {
         id: "in_1",
@@ -100,7 +100,7 @@ describe("stripe billing checkout recovery", () => {
     mockRetrieve.mockResolvedValue({
       id: "sub_123",
       customer: "cus_123",
-      metadata: { pileupUserId: "user_1", pileupPlanId: "plan_1" },
+      metadata: { pileUserId: "user_1", pilePlanId: "plan_1" },
       items: { data: [{ price: { id: "price_1" } }] },
       latest_invoice: {
         id: "in_1",
@@ -127,7 +127,7 @@ describe("stripe billing checkout recovery", () => {
     mockRetrieve.mockResolvedValue({
       id: "sub_123",
       customer: "cus_123",
-      metadata: { pileupUserId: "different_user", pileupPlanId: "plan_1" }
+      metadata: { pileUserId: "different_user", pilePlanId: "plan_1" }
     });
 
     await expect(

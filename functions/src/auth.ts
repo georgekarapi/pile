@@ -2,7 +2,7 @@ import type { Request, Response, NextFunction } from "express";
 import { PrivyClient } from "@privy-io/node";
 import { config } from "./config.js";
 
-export type AuthenticatedRequest = Request & { pileupUserId?: string };
+export type AuthenticatedRequest = Request & { pileUserId?: string };
 
 // Privy JWT verification belongs here. In demo mode we accept an explicitly marked
 // emulator header only; production requests must be verified before deployment.
@@ -13,9 +13,9 @@ const privy = config.PRIVY_APP_ID && config.PRIVY_APP_SECRET
 export async function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const token = req.header("authorization")?.replace(/^Bearer\s+/i, "");
   if (!token) {
-    const userId = req.header("x-pileup-demo-user");
-    if (process.env.PILEUP_MODE === "demo" && userId) {
-      req.pileupUserId = userId;
+    const userId = req.header("x-pile-demo-user") ?? req.header("x-pileup-demo-user");
+    if ((process.env.PILE_MODE === "demo" || process.env.PILEUP_MODE === "demo" || config.PILE_MODE === "demo") && userId) {
+      req.pileUserId = userId;
       next();
       return;
     }
@@ -23,7 +23,7 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
   if (!privy || !token) return res.status(401).json({ error: "A verified Privy access token is required" });
   try {
     const claims = await privy.utils().auth().verifyAuthToken(token);
-    req.pileupUserId = claims.user_id;
+    req.pileUserId = claims.user_id;
     next();
   } catch {
     res.status(401).json({ error: "Invalid or expired Privy access token" });
@@ -31,6 +31,6 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
 }
 
 export function getUserId(req: AuthenticatedRequest): string {
-  if (!req.pileupUserId) throw new Error("Missing authenticated user");
-  return req.pileupUserId;
+  if (!req.pileUserId) throw new Error("Missing authenticated user");
+  return req.pileUserId;
 }

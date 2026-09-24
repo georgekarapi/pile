@@ -1,13 +1,13 @@
 {
-  "name": "pileup",
+  "name": "pile",
   "private": true,
   "packageManager": "pnpm@12.4.2",
   "engines": { "node": ">=24 <25" },
   "workspaces": ["apps/*", "packages/*", "functions"],
   "scripts": {
-    "build": "pnpm --filter @pileup/shared run build && pnpm --filter @pileup/functions run build",
-    "dev": "pnpm --filter @pileup/mobile run start",
-    "typecheck": "pnpm --filter @pileup/shared run build && pnpm --recursive --if-present run typecheck",
+    "build": "pnpm --filter @pile/shared run build && pnpm --filter @pile/functions run build",
+    "dev": "pnpm --filter @pile/mobile run start",
+    "typecheck": "pnpm --filter @pile/shared run build && pnpm --recursive --if-present run typecheck",
     "test": "pnpm --recursive --if-present run test",
     "lint": "pnpm --recursive --if-present run lint"
   },

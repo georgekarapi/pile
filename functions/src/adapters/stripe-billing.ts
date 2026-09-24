@@ -11,24 +11,24 @@ export type SubscriptionCheckout = {
 };
 
 export async function createBillingSubscription(input: { userId: string; planId: string; amountUsd: number; priceId?: string; stripeCustomerId?: string; email?: string; idempotencyKey: string }): Promise<SubscriptionCheckout> {
-  if (config.PILEUP_MODE === "demo") {
+  if (config.PILE_MODE === "demo") {
     return { subscriptionId: `demo_subscription_${input.planId}`, customerId: input.stripeCustomerId ?? `demo_customer_${input.userId}`, priceId: `demo_price_${input.planId}_${input.amountUsd}`, mode: "demo" };
   }
   if (!config.STRIPE_SECRET_KEY) throw new Error("STRIPE_SECRET_KEY is required for live Billing");
   const stripe = new Stripe(config.STRIPE_SECRET_KEY);
   const customerId = input.stripeCustomerId ?? (await stripe.customers.create(
-    { email: input.email, metadata: { pileupUserId: input.userId } },
-    { idempotencyKey: `pileup-customer-${input.idempotencyKey}` }
+    { email: input.email, metadata: { pileUserId: input.userId } },
+    { idempotencyKey: `pile-customer-${input.idempotencyKey}` }
   )).id;
-  if (!input.priceId && config.PILEUP_STRIPE_PRODUCT_ID.includes("CONFIGURE_")) throw new Error("PILEUP_STRIPE_PRODUCT_ID is required for live Billing");
+  if (!input.priceId && config.PILE_STRIPE_PRODUCT_ID.includes("CONFIGURE_")) throw new Error("PILE_STRIPE_PRODUCT_ID is required for live Billing");
   const subscription = await stripe.subscriptions.create({
     customer: customerId,
-    items: [input.priceId ? { price: input.priceId } : { price_data: { currency: "usd", product: config.PILEUP_STRIPE_PRODUCT_ID, recurring: { interval: "week" }, unit_amount: input.amountUsd * 100 } }],
+    items: [input.priceId ? { price: input.priceId } : { price_data: { currency: "usd", product: config.PILE_STRIPE_PRODUCT_ID, recurring: { interval: "week" }, unit_amount: input.amountUsd * 100 } }],
     payment_behavior: "default_incomplete",
     payment_settings: { save_default_payment_method: "on_subscription" },
-    metadata: { pileupUserId: input.userId, pileupPlanId: input.planId },
+    metadata: { pileUserId: input.userId, pilePlanId: input.planId },
     expand: ["latest_invoice.confirmation_secret", "latest_invoice.payment_intent"]
-  }, { idempotencyKey: `pileup-subscription-${input.idempotencyKey}` });
+  }, { idempotencyKey: `pile-subscription-${input.idempotencyKey}` });
   const invoice = subscription.latest_invoice as Stripe.Invoice & { confirmation_secret?: { client_secret?: string }; payment_intent?: Stripe.PaymentIntent | string };
   const ephemeralKey = await stripe.ephemeralKeys.create({ customer: customerId }, { apiVersion: "2025-06-30.basil" as Stripe.LatestApiVersion });
   let clientSecret = invoice.confirmation_secret?.client_secret;
@@ -44,11 +44,13 @@ export async function createBillingSubscription(input: { userId: string; planId:
 }
 
 export async function getBillingSubscriptionCheckout(input: { subscriptionId: string; userId: string; planId: string }): Promise<SubscriptionCheckout> {
-  if (config.PILEUP_MODE === "demo") return { subscriptionId: input.subscriptionId, customerId: `demo_customer_${input.userId}`, mode: "demo" };
+  if (config.PILE_MODE === "demo") return { subscriptionId: input.subscriptionId, customerId: `demo_customer_${input.userId}`, mode: "demo" };
   if (!config.STRIPE_SECRET_KEY) throw new Error("STRIPE_SECRET_KEY is required for live Billing");
   const stripe = new Stripe(config.STRIPE_SECRET_KEY);
   const subscription = await stripe.subscriptions.retrieve(input.subscriptionId, { expand: ["latest_invoice.confirmation_secret", "latest_invoice.payment_intent"] });
-  if (subscription.metadata.pileupUserId !== input.userId || subscription.metadata.pileupPlanId !== input.planId) throw new Error("Stripe subscription does not match this plan");
+  const subUserId = subscription.metadata.pileUserId ?? subscription.metadata.pileupUserId;
+  const subPlanId = subscription.metadata.pilePlanId ?? subscription.metadata.pileupPlanId;
+  if (subUserId !== input.userId || subPlanId !== input.planId) throw new Error("Stripe subscription does not match this plan");
   const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
   const invoice = subscription.latest_invoice as Stripe.Invoice & { confirmation_secret?: { client_secret?: string }; payment_intent?: Stripe.PaymentIntent | string };
   let clientSecret = invoice?.confirmation_secret?.client_secret;
@@ -65,18 +67,20 @@ export async function getBillingSubscriptionCheckout(input: { subscriptionId: st
 }
 
 export async function createPaymentMethodPortalSession(input: { subscriptionId: string; userId: string; planId: string; customerId: string }): Promise<{ url: string; defaultMethodId: string }> {
-  if (config.PILEUP_MODE !== "live" || !config.STRIPE_SECRET_KEY) throw new Error("Stripe Billing is unavailable");
+  if (config.PILE_MODE !== "live" || !config.STRIPE_SECRET_KEY) throw new Error("Stripe Billing is unavailable");
   const stripe = new Stripe(config.STRIPE_SECRET_KEY);
   const subscription = await stripe.subscriptions.retrieve(input.subscriptionId);
   const subscriptionCustomerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
-  if (subscription.metadata.pileupUserId !== input.userId || subscription.metadata.pileupPlanId !== input.planId || subscriptionCustomerId !== input.customerId) throw new Error("Stripe subscription does not match this account");
+  const subUserId = subscription.metadata.pileUserId ?? subscription.metadata.pileupUserId;
+  const subPlanId = subscription.metadata.pilePlanId ?? subscription.metadata.pileupPlanId;
+  if (subUserId !== input.userId || subPlanId !== input.planId || subscriptionCustomerId !== input.customerId) throw new Error("Stripe subscription does not match this account");
   const customer = await stripe.customers.retrieve(input.customerId);
   if (customer.deleted) throw new Error("Stripe customer is unavailable");
   const defaultMethod = customer.invoice_settings.default_payment_method;
   const defaultMethodId = typeof defaultMethod === "string" ? defaultMethod : defaultMethod?.id ?? "";
   const session = await stripe.billingPortal.sessions.create({
     customer: input.customerId,
-    ...(config.PILEUP_STRIPE_PORTAL_CONFIGURATION_ID ? { configuration: config.PILEUP_STRIPE_PORTAL_CONFIGURATION_ID } : {}),
+    ...(config.PILE_STRIPE_PORTAL_CONFIGURATION_ID ? { configuration: config.PILE_STRIPE_PORTAL_CONFIGURATION_ID } : {}),
     flow_data: { type: "payment_method_update" }
   });
   if (!session.url.startsWith("https://billing.stripe.com/")) throw new Error("Stripe returned an unexpected portal URL");
@@ -84,11 +88,13 @@ export async function createPaymentMethodPortalSession(input: { subscriptionId: 
 }
 
 export async function syncBillingPaymentMethod(input: { subscriptionId: string; userId: string; planId: string; customerId: string; previousDefaultMethodId: string }): Promise<boolean> {
-  if (config.PILEUP_MODE !== "live" || !config.STRIPE_SECRET_KEY) throw new Error("Stripe Billing is unavailable");
+  if (config.PILE_MODE !== "live" || !config.STRIPE_SECRET_KEY) throw new Error("Stripe Billing is unavailable");
   const stripe = new Stripe(config.STRIPE_SECRET_KEY);
   const subscription = await stripe.subscriptions.retrieve(input.subscriptionId);
   const subscriptionCustomerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
-  if (subscription.metadata.pileupUserId !== input.userId || subscription.metadata.pileupPlanId !== input.planId || subscriptionCustomerId !== input.customerId) throw new Error("Stripe subscription does not match this account");
+  const subUserId = subscription.metadata.pileUserId ?? subscription.metadata.pileupUserId;
+  const subPlanId = subscription.metadata.pilePlanId ?? subscription.metadata.pileupPlanId;
+  if (subUserId !== input.userId || subPlanId !== input.planId || subscriptionCustomerId !== input.customerId) throw new Error("Stripe subscription does not match this account");
   const customer = await stripe.customers.retrieve(input.customerId);
   if (customer.deleted) throw new Error("Stripe customer is unavailable");
   const defaultMethod = customer.invoice_settings.default_payment_method;
@@ -97,20 +103,22 @@ export async function syncBillingPaymentMethod(input: { subscriptionId: string; 
   const currentMethod = subscription.default_payment_method;
   const currentMethodId = typeof currentMethod === "string" ? currentMethod : currentMethod?.id;
   if (currentMethodId === paymentMethodId) return false;
-  await stripe.subscriptions.update(input.subscriptionId, { default_payment_method: paymentMethodId }, { idempotencyKey: `pileup-payment-method-${input.subscriptionId}-${paymentMethodId}` });
+  await stripe.subscriptions.update(input.subscriptionId, { default_payment_method: paymentMethodId }, { idempotencyKey: `pile-payment-method-${input.subscriptionId}-${paymentMethodId}` });
   return true;
 }
 
 export async function changeBillingSubscription(input: { subscriptionId: string; userId: string; planId: string; amountUsd: number; previousPriceId?: string; idempotencyKey: string }): Promise<{ priceId: string; previousPriceId: string }> {
-  if (config.PILEUP_MODE === "demo") return { priceId: `demo_price_${input.amountUsd}_${input.idempotencyKey}`, previousPriceId: input.previousPriceId ?? `demo_price_${input.planId}_legacy` };
-  if (!config.STRIPE_SECRET_KEY || config.PILEUP_STRIPE_PRODUCT_ID.includes("CONFIGURE_")) throw new Error("Stripe Billing is not configured");
+  if (config.PILE_MODE === "demo") return { priceId: `demo_price_${input.amountUsd}_${input.idempotencyKey}`, previousPriceId: input.previousPriceId ?? `demo_price_${input.planId}_legacy` };
+  if (!config.STRIPE_SECRET_KEY || config.PILE_STRIPE_PRODUCT_ID.includes("CONFIGURE_")) throw new Error("Stripe Billing is not configured");
   if (!input.previousPriceId) throw new Error("The current subscription price must be reconciled before changing this plan");
   const stripe = new Stripe(config.STRIPE_SECRET_KEY);
   const current = await stripe.subscriptions.retrieve(input.subscriptionId);
-  if (current.metadata.pileupUserId !== input.userId || current.metadata.pileupPlanId !== input.planId || current.status !== "active") throw new Error("The active Stripe subscription does not match this plan");
+  const currentUserId = current.metadata.pileUserId ?? current.metadata.pileupUserId;
+  const currentPlanId = current.metadata.pilePlanId ?? current.metadata.pileupPlanId;
+  if (currentUserId !== input.userId || currentPlanId !== input.planId || current.status !== "active") throw new Error("The active Stripe subscription does not match this plan");
   if (current.items.data.length !== 1) throw new Error("Expected exactly one subscription item");
   const item = current.items.data[0];
-  const targetPrice = await stripe.prices.create({ currency: "usd", product: config.PILEUP_STRIPE_PRODUCT_ID, recurring: { interval: "week" }, unit_amount: input.amountUsd * 100, metadata: { pileupPlanId: input.planId, pileupPlanChangeKey: input.idempotencyKey } }, { idempotencyKey: `pileup-change-price-${input.idempotencyKey}` });
+  const targetPrice = await stripe.prices.create({ currency: "usd", product: config.PILE_STRIPE_PRODUCT_ID, recurring: { interval: "week" }, unit_amount: input.amountUsd * 100, metadata: { pilePlanId: input.planId, pilePlanChangeKey: input.idempotencyKey } }, { idempotencyKey: `pile-change-price-${input.idempotencyKey}` });
   if (item.price.id !== input.previousPriceId) {
     if (item.price.id === targetPrice.id) return { priceId: item.price.id, previousPriceId: input.previousPriceId };
     throw new Error("Subscription price changed; refresh the plan before trying again");
@@ -119,30 +127,34 @@ export async function changeBillingSubscription(input: { subscriptionId: string;
     items: [{ id: item.id, price: targetPrice.id }],
     proration_behavior: "none",
     billing_cycle_anchor: "unchanged"
-  }, { idempotencyKey: `pileup-change-${input.idempotencyKey}` });
+  }, { idempotencyKey: `pile-change-${input.idempotencyKey}` });
   const priceId = changed.items.data[0]?.price.id;
   if (!priceId) throw new Error("Stripe did not return the updated subscription price");
   return { priceId, previousPriceId: item.price.id };
 }
 
 export async function pauseBillingSubscription(input: { subscriptionId: string; userId: string; planId: string; priceId?: string; idempotencyKey: string }): Promise<void> {
-  if (config.PILEUP_MODE === "demo") return;
+  if (config.PILE_MODE === "demo") return;
   if (!config.STRIPE_SECRET_KEY) throw new Error("STRIPE_SECRET_KEY is required for live Billing");
   const stripe = new Stripe(config.STRIPE_SECRET_KEY);
   const subscription = await stripe.subscriptions.retrieve(input.subscriptionId);
-  if (subscription.metadata.pileupUserId !== input.userId || subscription.metadata.pileupPlanId !== input.planId || subscription.status !== "active") throw new Error("Stripe subscription does not match this plan");
+  const subUserId = subscription.metadata.pileUserId ?? subscription.metadata.pileupUserId;
+  const subPlanId = subscription.metadata.pilePlanId ?? subscription.metadata.pileupPlanId;
+  if (subUserId !== input.userId || subPlanId !== input.planId || subscription.status !== "active") throw new Error("Stripe subscription does not match this plan");
   if (subscription.items.data.length !== 1 || (input.priceId && subscription.items.data[0]?.price.id !== input.priceId)) throw new Error("Subscription price changed; reconcile before pausing");
   if (subscription.pause_collection?.behavior === "void") return;
-  await stripe.subscriptions.update(input.subscriptionId, { pause_collection: { behavior: "void" } }, { idempotencyKey: `pileup-pause-${input.idempotencyKey}` });
+  await stripe.subscriptions.update(input.subscriptionId, { pause_collection: { behavior: "void" } }, { idempotencyKey: `pile-pause-${input.idempotencyKey}` });
 }
 
 export async function resumeBillingSubscription(input: { subscriptionId: string; userId: string; planId: string; priceId?: string; idempotencyKey: string }): Promise<void> {
-  if (config.PILEUP_MODE === "demo") return;
+  if (config.PILE_MODE === "demo") return;
   if (!config.STRIPE_SECRET_KEY) throw new Error("STRIPE_SECRET_KEY is required for live Billing");
   const stripe = new Stripe(config.STRIPE_SECRET_KEY);
   const subscription = await stripe.subscriptions.retrieve(input.subscriptionId);
-  if (subscription.metadata.pileupUserId !== input.userId || subscription.metadata.pileupPlanId !== input.planId || subscription.status !== "active") throw new Error("Stripe subscription does not match this plan");
+  const subUserId = subscription.metadata.pileUserId ?? subscription.metadata.pileupUserId;
+  const subPlanId = subscription.metadata.pilePlanId ?? subscription.metadata.pileupPlanId;
+  if (subUserId !== input.userId || subPlanId !== input.planId || subscription.status !== "active") throw new Error("Stripe subscription does not match this plan");
   if (subscription.items.data.length !== 1 || (input.priceId && subscription.items.data[0]?.price.id !== input.priceId)) throw new Error("Subscription price changed; reconcile before resuming");
   if (!subscription.pause_collection) return;
-  await stripe.subscriptions.update(input.subscriptionId, { pause_collection: "" }, { idempotencyKey: `pileup-resume-${input.idempotencyKey}` });
+  await stripe.subscriptions.update(input.subscriptionId, { pause_collection: "" }, { idempotencyKey: `pile-resume-${input.idempotencyKey}` });
 }

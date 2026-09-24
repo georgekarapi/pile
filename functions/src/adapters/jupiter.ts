@@ -1,4 +1,4 @@
-import type { SwapPort, UnsignedTransaction } from "@pileup/shared";
+import type { SwapPort, UnsignedTransaction } from "@pile/shared";
 import { config } from "../config.js";
 
 type JupiterOrder = {
@@ -23,7 +23,7 @@ export class JupiterSwapAdapter implements SwapPort {
 
   async buildSwap(input: { owner: string; inputUsdcAtomic: bigint; outputMint: string }): Promise<UnsignedTransaction> {
     if (!config.JUPITER_API_KEY) throw new Error("JUPITER_API_KEY is required");
-    const params = new URLSearchParams({ inputMint: config.PILEUP_USDC_MINT, outputMint: input.outputMint, amount: input.inputUsdcAtomic.toString(), taker: input.owner });
+    const params = new URLSearchParams({ inputMint: config.PILE_USDC_MINT, outputMint: input.outputMint, amount: input.inputUsdcAtomic.toString(), taker: input.owner });
     const response = await fetch(`${this.baseUrl}/order?${params}`, { headers: { "x-api-key": config.JUPITER_API_KEY } });
     if (!response.ok) throw new Error(`Jupiter order failed: ${response.status} ${await response.text()}`);
     const order = await response.json() as JupiterOrder;
@@ -38,7 +38,7 @@ export class JupiterSwapAdapter implements SwapPort {
         // policy validator checks the request inputs; live deployments must also
         // decode the wire transaction against the expected taker/output accounts.
         programIds: ["jupiter-ultra", "spl-token", "compute-budget"],
-        mints: [config.PILEUP_USDC_MINT, input.outputMint],
+        mints: [config.PILE_USDC_MINT, input.outputMint],
         inputAtomic: input.inputUsdcAtomic,
         recipients: [input.owner]
       },

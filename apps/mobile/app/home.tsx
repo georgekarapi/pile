@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { FundingCycle, Health, Plan } from "@pileup/shared";
+import type { FundingCycle, Health, Plan } from "@pile/shared";
 import Constants from "expo-constants";
 import { router, useLocalSearchParams } from "expo-router";
 import { ArrowRight, ChevronRight } from "lucide-react-native";

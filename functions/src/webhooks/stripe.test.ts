@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Request, Response } from "express";
-import type { Plan } from "@pileup/shared";
+import type { Plan } from "@pile/shared";
 
 vi.mock("firebase-admin/functions", () => ({
   getFunctions: () => ({
@@ -77,7 +77,7 @@ describe("stripe webhook", () => {
     expect(res.data).toEqual({ received: true, ignored: true });
   });
 
-  it("rejects an invoice lacking immutable Pile Up subscription metadata", async () => {
+  it("rejects an invoice lacking immutable Pile subscription metadata", async () => {
     const req = {
       body: {
         id: "evt_1",
@@ -88,7 +88,7 @@ describe("stripe webhook", () => {
     const res = createMockRes();
     await stripeWebhook(req, res);
     expect(res.statusCode).toBe(400);
-    expect(res.data).toEqual({ error: "Invoice lacks immutable Pile Up subscription metadata" });
+    expect(res.data).toEqual({ error: "Invoice lacks immutable Pile subscription metadata" });
   });
 
   it("records payment failure and marks webhook processed on invoice.payment_failed", async () => {
@@ -104,12 +104,12 @@ describe("stripe webhook", () => {
             collection_method: "charge_automatically",
             currency: "usd",
             subscription_details: {
-              metadata: { pileupPlanId: "plan_123", pileupUserId: "user_abc" }
+              metadata: { pilePlanId: "plan_123", pileUserId: "user_abc" }
             },
             parent: {
               subscription_details: {
                 subscription: "sub_123",
-                metadata: { pileupPlanId: "plan_123", pileupUserId: "user_abc" }
+                metadata: { pilePlanId: "plan_123", pileUserId: "user_abc" }
               }
             }
           }
@@ -146,7 +146,7 @@ describe("stripe webhook", () => {
             parent: {
               subscription_details: {
                 subscription: "sub_123",
-                metadata: { pileupPlanId: "plan_123", pileupUserId: "user_abc" }
+                metadata: { pilePlanId: "plan_123", pileUserId: "user_abc" }
               }
             }
           }
@@ -181,7 +181,7 @@ describe("stripe webhook", () => {
             parent: {
               subscription_details: {
                 subscription: "sub_123",
-                metadata: { pileupPlanId: "plan_123", pileupUserId: "user_abc" }
+                metadata: { pilePlanId: "plan_123", pileUserId: "user_abc" }
               }
             }
           }
@@ -215,7 +215,7 @@ describe("stripe webhook", () => {
         data: {
           object: {
             id: "sub_123",
-            metadata: { pileupPlanId: "plan_123", pileupUserId: "user_abc" }
+            metadata: { pilePlanId: "plan_123", pileUserId: "user_abc" }
           }
         }
       }

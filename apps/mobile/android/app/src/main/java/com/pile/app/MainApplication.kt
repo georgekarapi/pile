@@ -1,4 +1,4 @@
-package com.pileup.app
+package com.pile.app
 
 import android.app.Application
 import android.content.res.Configuration
