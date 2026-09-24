@@ -17,11 +17,13 @@ Keep the pile. Spend the overflow.
 ## Local setup
 
 1. Copy `functions/.env.example` to `functions/.env` and fill provider credentials.
-2. Run `npm install`.
-3. Run `npm run test` and `npm run typecheck`.
-4. Start emulators with `npx firebase-tools emulators:start` after configuring a Firebase project.
-5. Copy `apps/mobile/.env.example` to `apps/mobile/.env`, then start the development client with `npm run start -w @pileup/mobile`.
-6. Verify the production iOS JavaScript bundle with `npm run export:ios -w @pileup/mobile`.
+2. Install and select the repo's Node version with `nvm install` and `nvm use` (`.nvmrc` pins Node 24).
+3. Enable Corepack's pnpm shim for that nvm-managed Node installation with `corepack enable pnpm`.
+4. Run `pnpm install` (the root `packageManager` field pins pnpm 12.4.2).
+5. Run `pnpm test` and `pnpm typecheck`.
+6. Start emulators with `pnpm dlx firebase-tools emulators:start` after configuring a Firebase project.
+7. Copy `apps/mobile/.env.example` to `apps/mobile/.env`, then start the development client with `pnpm --filter @pileup/mobile start`.
+8. Verify the production iOS JavaScript bundle with `pnpm --filter @pileup/mobile export:ios`.
 
 All money-moving adapters default to explicit demo mode. Never add treasury keys or provider secrets to the mobile app.
 
@@ -31,6 +33,7 @@ configuration, and Hermes transform profile required by the current Expo SDK.
 ## Safety invariants
 
 - A Stripe invoice is not a wallet credit. Credit, swap, deposit, borrow, and card readiness are individually persisted workflow states.
+- Stripe webhooks validate immutable subscription identity and enqueue work; a task worker submits and confirms each on-chain lending action.
 - Firestore is never an account ledger; Solana and Kamino are the balance/risk source of truth.
 - The delegated signer may use only configured programs and mints, within the cycle cap, and may borrow only to the user wallet.
 - The card spends existing USDC. Pileup does not borrow in the card authorization path and never auto-sells xStocks.
