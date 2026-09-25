@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Screen } from "@/components/ui/screen";
 import { Body, Text, Title } from "@/components/ui/text";
 import { api } from "@/lib/api";
-import { useAppStore } from "@/stores/app-store";
+import { useAppStore, type MixId } from "@/stores/app-store";
 
 export default function WeeklyPlan() {
   const preview = Constants.appOwnership === "expo";
@@ -20,6 +20,8 @@ export default function WeeklyPlan() {
   const setDraft = useAppStore((s) => s.setDraft);
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: ["current-plan"], queryFn: api.currentPlan, enabled: !preview });
+  const optionsQuery = useQuery({ queryKey: ["plan-options"], queryFn: api.planOptions });
+  const options = optionsQuery.data?.options;
   const plan = preview ? storedPlan : query.data?.plan ?? undefined;
   useEffect(() => {
     if (preview || !query.isSuccess) return;
@@ -29,20 +31,21 @@ export default function WeeklyPlan() {
   }, [preview, query.isSuccess, plan?.status]);
   const paused = plan?.status === "paused" || (preview && previewState === "paused");
   const amount = plan?.amountUsd ?? draftAmount;
-  const isPrestocks = plan ? plan.weights.some((w) => w.symbol === "OPENAI" || w.symbol === "SPACEX" || w.symbol === "ANTHROPIC") : draftMix === "prestocks";
-  const mix = isPrestocks
-    ? "Pre-IPO Giants (PreStocks)"
-    : plan
-      ? plan.weights.length === 1
+  const matchedOption = options?.find((o) => {
+    if (!plan) return o.id === draftMix;
+    if (o.weights.length !== plan.weights.length) return false;
+    const bySymbol = new Map(plan.weights.map((w) => [w.symbol, w.bps]));
+    return o.weights.every((w) => bySymbol.get(w.symbol) === w.bps);
+  });
+  const mix = matchedOption?.title ?? (
+    plan?.weights.some((w) => w.symbol === "OPENAI" || w.symbol === "SPACEX" || w.symbol === "ANTHROPIC" || w.symbol === "ANDURIL") || draftMix === "prestocks"
+      ? "Pre-IPO Giants (PreStocks)"
+      : plan?.weights.length === 1 || draftMix === "market"
         ? "The whole market"
-        : plan.weights.length === 2
+        : plan?.weights.length === 2 || draftMix === "tech"
           ? "Big tech"
           : "A bit of both"
-      : draftMix === "market"
-        ? "The whole market"
-        : draftMix === "tech"
-          ? "Big tech"
-          : "A bit of both";
+  );
   const pause = useMutation({ mutationFn: () => plan ? api.pausePlan(plan.id, plan.updatedAt) : Promise.reject(new Error("No weekly plan")), onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["current-plan"] }); router.replace("/home"); } });
   const resume = useMutation({ mutationFn: () => plan ? api.resumePlan(plan.id, plan.updatedAt) : Promise.reject(new Error("No weekly plan")), onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["current-plan"] }); } });
   const paymentMethod = useMutation({ mutationFn: async () => {
@@ -54,15 +57,26 @@ export default function WeeklyPlan() {
   const change = () => {
     if (preview || !plan) return router.push("/onboarding");
     if (plan.status !== "live") return Alert.alert("Plan unavailable", "A weekly plan must be active before it can be changed.");
+    const matchedOption = options?.find((o) => {
+      if (o.weights.length !== plan.weights.length) return false;
+      const bySymbol = new Map(plan.weights.map((w) => [w.symbol, w.bps]));
+      return o.weights.every((w) => bySymbol.get(w.symbol) === w.bps);
+    });
     setDraft({
       draftAmount: plan.amountUsd,
-      draftMix: plan.weights.some((w) => w.symbol === "OPENAI" || w.symbol === "SPACEX" || w.symbol === "ANTHROPIC")
-        ? "prestocks"
-        : plan.weights.length === 1
-          ? "market"
-          : plan.weights.length === 2
-            ? "tech"
-            : "balanced"
+      draftMix: (matchedOption?.id as MixId) ?? (
+        plan.weights.some((w) => w.symbol === "OPENAI" || w.symbol === "SPACEX" || w.symbol === "ANTHROPIC" || w.symbol === "ANDURIL")
+          ? "prestocks"
+          : plan.weights.some((w) => w.symbol === "METAx" || w.symbol === "NFLXx")
+            ? "faang"
+            : plan.weights.some((w) => w.symbol === "GOOGLx" || w.symbol === "MSFTx")
+              ? "bigfour"
+              : plan.weights.length === 1
+                ? "market"
+                : plan.weights.length === 2
+                  ? "tech"
+                  : "bigfour"
+      )
     });
     router.push({ pathname: "/onboarding", params: { mode: "edit", planId: plan.id } });
   };

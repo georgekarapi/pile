@@ -5,6 +5,158 @@ import type { BasketWeight, CardRecord, FundingCycle, Plan } from "@pile/shared"
 const db = () => getFirestore();
 const now = () => new Date().toISOString();
 
+export type StoredPlanOption = {
+  id: string;
+  title: string;
+  detail: string;
+  tag?: string;
+  isPartner?: boolean;
+  description?: string;
+  weights: BasketWeight[];
+  icons?: string[];
+  active?: boolean;
+  order?: number;
+  updatedAt?: string;
+};
+
+export const DEFAULT_PLAN_OPTIONS: StoredPlanOption[] = [
+  {
+    id: "bigfour",
+    title: "The Big Four",
+    tag: "TOP 4 xSTOCKS",
+    detail: "World's 4 largest public companies",
+    description: "Equal-weight 25% allocation to the four largest global tech leaders via tokenized xStocks.",
+    icons: [
+      "https://assets.parqet.com/logos/symbol/NVDA?format=png",
+      "https://assets.parqet.com/logos/symbol/AAPL?format=png",
+      "https://assets.parqet.com/logos/symbol/GOOGL?format=png",
+      "https://assets.parqet.com/logos/symbol/MSFT?format=png"
+    ],
+    weights: [
+      { symbol: "NVDAx", mint: "NVDAxQ6v4E5nZ4J8qB6qD3f2G1hSPYxPBLw4qMvjD", bps: 2500, name: "NVIDIA xStock", image: "https://assets.parqet.com/logos/symbol/NVDA?format=png" },
+      { symbol: "AAPLx", mint: "AAPLxR6v4E5nZ4J8qB6qD3f2G1hSPYxPBLw4qMvjD", bps: 2500, name: "Apple xStock", image: "https://assets.parqet.com/logos/symbol/AAPL?format=png" },
+      { symbol: "GOOGLx", mint: "GOOGLx7v4E5nZ4J8qB6qD3f2G1hSPYxPBLw4qMvjD", bps: 2500, name: "Alphabet xStock", image: "https://assets.parqet.com/logos/symbol/GOOGL?format=png" },
+      { symbol: "MSFTx", mint: "MSFTxS6v4E5nZ4J8qB6qD3f2G1hSPYxPBLw4qMvjD", bps: 2500, name: "Microsoft xStock", image: "https://assets.parqet.com/logos/symbol/MSFT?format=png" }
+    ],
+    active: true,
+    order: 0
+  },
+  {
+    id: "prestocks",
+    title: "Pre-IPO Giants",
+    tag: "PRESTOCKS",
+    isPartner: true,
+    detail: "Top private unicorns before IPO",
+    description: "Accumulate tokenized pre-IPO equity in the world's leading private AI, space, and defense companies.",
+    icons: [
+      "https://prestocks.com/logos/openai.png",
+      "https://prestocks.com/logos/spacex.png",
+      "https://prestocks.com/logos/anthropic.png",
+      "https://prestocks.com/logos/anduril.png"
+    ],
+    weights: [
+      { symbol: "OPENAI", mint: "PreweJYECqtQwBtpxHL171nL2K6umo692gTm7Q3rpgF", bps: 3500, name: "OpenAI PreStocks", image: "https://prestocks.com/logos/openai.png" },
+      { symbol: "SPACEX", mint: "PreANxuXjsy2pvisWWMNB6YaJNzr7681wJJr2rHsfTh", bps: 2500, name: "SpaceX PreStocks", image: "https://prestocks.com/logos/spacex.png" },
+      { symbol: "ANTHROPIC", mint: "Pren1FvFX6J3E4kXhJuCiAD5aDmGEb7qJRncwA8Lkhw", bps: 2500, name: "Anthropic PreStocks", image: "https://prestocks.com/logos/anthropic.png" },
+      { symbol: "ANDURIL", mint: "PresTj4Yc2bAR197Er7wz4UUKSfqt6FryBEdAriBoQB", bps: 1500, name: "Anduril PreStocks", image: "https://prestocks.com/logos/anduril.png" }
+    ],
+    active: true,
+    order: 1
+  },
+  {
+    id: "faang",
+    title: "FAANG Basket",
+    tag: "BLUE CHIP TECH",
+    detail: "The 5 defining blue-chip tech titans",
+    description: "Equal-weight 20% allocation across Meta, Apple, Amazon, Netflix, and Alphabet.",
+    icons: [
+      "https://assets.parqet.com/logos/symbol/META?format=png",
+      "https://assets.parqet.com/logos/symbol/AAPL?format=png",
+      "https://assets.parqet.com/logos/symbol/AMZN?format=png",
+      "https://assets.parqet.com/logos/symbol/NFLX?format=png",
+      "https://assets.parqet.com/logos/symbol/GOOGL?format=png"
+    ],
+    weights: [
+      { symbol: "METAx", mint: "METAxT6v4E5nZ4J8qB6qD3f2G1hSPYxPBLw4qMvjD", bps: 2000, name: "Meta xStock", image: "https://assets.parqet.com/logos/symbol/META?format=png" },
+      { symbol: "AAPLx", mint: "AAPLxR6v4E5nZ4J8qB6qD3f2G1hSPYxPBLw4qMvjD", bps: 2000, name: "Apple xStock", image: "https://assets.parqet.com/logos/symbol/AAPL?format=png" },
+      { symbol: "AMZNx", mint: "AMZNxU6v4E5nZ4J8qB6qD3f2G1hSPYxPBLw4qMvjD", bps: 2000, name: "Amazon xStock", image: "https://assets.parqet.com/logos/symbol/AMZN?format=png" },
+      { symbol: "NFLXx", mint: "NFLXxV6v4E5nZ4J8qB6qD3f2G1hSPYxPBLw4qMvjD", bps: 2000, name: "Netflix xStock", image: "https://assets.parqet.com/logos/symbol/NFLX?format=png" },
+      { symbol: "GOOGLx", mint: "GOOGLx7v4E5nZ4J8qB6qD3f2G1hSPYxPBLw4qMvjD", bps: 2000, name: "Alphabet xStock", image: "https://assets.parqet.com/logos/symbol/GOOGL?format=png" }
+    ],
+    active: true,
+    order: 2
+  },
+  {
+    id: "balanced",
+    title: "A bit of both",
+    detail: "Big tech + the whole market",
+    description: "Diversified mix of broad index exposure and blue-chip tech.",
+    weights: [
+      { symbol: "SPYx", mint: "SPYxPBLw4qMvjDug1s6v4E5nZ4J8qB6qD3f2G1h", bps: 4000, name: "S&P 500 ETF" },
+      { symbol: "NVDAx", mint: "NVDAxQ6v4E5nZ4J8qB6qD3f2G1hSPYxPBLw4qMvjD", bps: 3000, name: "NVIDIA xStock" },
+      { symbol: "AAPLx", mint: "AAPLxR6v4E5nZ4J8qB6qD3f2G1hSPYxPBLw4qMvjD", bps: 3000, name: "Apple xStock" }
+    ],
+    active: false,
+    order: 3
+  },
+  {
+    id: "market",
+    title: "The whole market",
+    detail: "A little of almost everything",
+    description: "100% S&P 500 ETF representation for passive compounding.",
+    weights: [
+      { symbol: "SPYx", mint: "SPYxPBLw4qMvjDug1s6v4E5nZ4J8qB6qD3f2G1h", bps: 10000, name: "S&P 500 ETF" }
+    ],
+    active: false,
+    order: 4
+  },
+  {
+    id: "tech",
+    title: "Big tech",
+    detail: "A focused, bumpier pile",
+    description: "High-conviction tech leaders NVDA and AAPL.",
+    weights: [
+      { symbol: "NVDAx", mint: "NVDAxQ6v4E5nZ4J8qB6qD3f2G1hSPYxPBLw4qMvjD", bps: 5000, name: "NVIDIA xStock" },
+      { symbol: "AAPLx", mint: "AAPLxR6v4E5nZ4J8qB6qD3f2G1hSPYxPBLw4qMvjD", bps: 5000, name: "Apple xStock" }
+    ],
+    active: false,
+    order: 5
+  }
+];
+
+export async function getPlanOptionsFromFirestore(): Promise<StoredPlanOption[]> {
+  const snap = await db().collection("plan_options").where("active", "!=", false).get();
+  if (snap.empty) {
+    const batch = db().batch();
+    for (const opt of DEFAULT_PLAN_OPTIONS) {
+      batch.set(db().collection("plan_options").doc(opt.id), { ...opt, updatedAt: now() });
+    }
+    await batch.commit();
+    return DEFAULT_PLAN_OPTIONS;
+  }
+  return snap.docs
+    .map((doc) => doc.data() as StoredPlanOption)
+    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+}
+
+export async function getPlanOptionById(id: string): Promise<StoredPlanOption | undefined> {
+  const snap = await db().collection("plan_options").doc(id).get();
+  if (snap.exists) {
+    const data = snap.data() as StoredPlanOption;
+    if (data.active !== false) return data;
+  }
+  const all = await getPlanOptionsFromFirestore();
+  return all.find((opt) => opt.id === id);
+}
+
+export async function savePlanOption(option: StoredPlanOption): Promise<void> {
+  await db().collection("plan_options").doc(option.id).set({
+    ...option,
+    active: option.active ?? true,
+    updatedAt: now()
+  }, { merge: true });
+}
+
 export async function getPlan(planId: string): Promise<Plan | undefined> {
   const snap = await db().collection("plans").doc(planId).get();
   return snap.exists ? snap.data() as Plan : undefined;

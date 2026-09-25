@@ -3,30 +3,56 @@ import express from "express";
 import { randomUUID } from "node:crypto";
 import { assertPlanInput, assertTransactionWithinPolicy } from "@pile/shared";
 import { z } from "zod";
-import { allowedOrigins, allConfiguredAssets, basketRegistry, config, prestocksRegistry } from "../config.js";
+import { allowedOrigins, config } from "../config.js";
 import { fetchPreStocks } from "../services/prestocks.js";
 import { getUserId, requireAuth, type AuthenticatedRequest } from "../auth.js";
-import { beginPlanChange, beginPlanPause, beginPlanResume, claimMutation, completeMutation, finalizePlanChange, finalizePlanPause, finalizePlanResume, getActivePlan, getCard, getCurrentPlan, getLatestCycle, getPausedPlan, getPlan, getUser, releaseMutation, releasePlanChange, saveCard, savePlan, saveUser } from "../repository.js";
+import {
+  beginPlanChange, beginPlanPause, beginPlanResume, claimMutation, completeMutation,
+  finalizePlanChange, finalizePlanPause, finalizePlanResume, getActivePlan, getCard,
+  getCurrentPlan, getLatestCycle, getPausedPlan, getPlan, getPlanOptionById,
+  getPlanOptionsFromFirestore, getUser, releaseMutation, releasePlanChange, saveCard,
+  savePlan, savePlanOption, saveUser, type StoredPlanOption
+} from "../repository.js";
 import { providers } from "../adapters/factory.js";
 import { changeBillingSubscription, createBillingSubscription, createPaymentMethodPortalSession, getBillingSubscriptionCheckout, pauseBillingSubscription, resumeBillingSubscription, syncBillingPaymentMethod } from "../adapters/stripe-billing.js";
 import { createBridgeKycLink, getBridgeKycLink, identityStatusFromBridge } from "../adapters/bridge-kyc.js";
 
-const planSchema = z.object({ amountUsd: z.number().int().min(10).max(150).multipleOf(5), mix: z.enum(["balanced", "market", "tech", "prestocks"]).optional(), weights: z.array(z.object({ symbol: z.string(), mint: z.string(), bps: z.number().int() })).optional() });
-const changePlanSchema = z.object({ amountUsd: z.number().int().min(10).max(150).multipleOf(5), mix: z.enum(["balanced", "market", "tech", "prestocks"]), expectedUpdatedAt: z.string().min(1) });
+const planSchema = z.object({
+  amountUsd: z.number().int().min(10).max(150).multipleOf(5),
+  mix: z.string().min(1).optional(),
+  weights: z.array(z.object({
+    symbol: z.string(),
+    mint: z.string(),
+    bps: z.number().int(),
+    name: z.string().optional(),
+    image: z.string().optional()
+  })).optional()
+});
+const changePlanSchema = z.object({
+  amountUsd: z.number().int().min(10).max(150).multipleOf(5),
+  mix: z.string().min(1),
+  expectedUpdatedAt: z.string().min(1)
+});
 const freezeSchema = z.object({ frozen: z.boolean() });
 
-function weightsForMix(mix: "balanced" | "market" | "tech" | "prestocks") {
-  if (mix === "prestocks") return prestocksRegistry.map((asset) => ({ ...asset }));
-  if (mix === "market") return [{ ...basketRegistry[0], bps: 10_000 }];
-  if (mix === "tech") return [{ ...basketRegistry[1], bps: 5_000 }, { ...basketRegistry[2], bps: 5_000 }];
-  return basketRegistry.map((asset) => ({ ...asset }));
-}
-
-function assertConfiguredBasket(weights: { symbol: string; mint: string; bps: number }[]): void {
-  const configuredAssets = new Map(allConfiguredAssets.map((asset) => [asset.mint, asset.symbol]));
-  for (const weight of weights) {
-    if (configuredAssets.get(weight.mint) !== weight.symbol) throw new Error("Basket contains an unsupported asset");
-  }
+async function getWeightsForMix(mixId: string) {
+  const option = await getPlanOptionById(mixId);
+  if (!option) throw new Error(`Plan option "${mixId}" not found`);
+  const prestocks = await fetchPreStocks().catch(() => []);
+  const prestocksBySymbol = new Map(prestocks.map((item) => [item.symbol, item]));
+  return option.weights.map((w) => {
+    const live = prestocksBySymbol.get(w.symbol);
+    return live
+      ? {
+          ...w,
+          mint: w.mint || live.contract_address,
+          name: live.name ?? w.name,
+          image: live.image ?? w.image,
+          markPrice: live.markPrice,
+          impliedValuation: live.impliedValuation
+        }
+      : w;
+  });
 }
 
 function idempotencyKey(req: express.Request): string {
@@ -82,70 +108,50 @@ app.get("/v1/healthz", (_req, res) => res.json({ ok: true, mode: process.env.PIL
 
 app.get("/v1/plans/options", async (_req, res) => {
   try {
-    const prestocks = await fetchPreStocks();
+    const [storedOptions, prestocks] = await Promise.all([
+      getPlanOptionsFromFirestore(),
+      fetchPreStocks()
+    ]);
     const prestocksBySymbol = new Map(prestocks.map((item) => [item.symbol, item]));
 
-    const prestocksWeights = prestocksRegistry.map((item) => {
-      const live = prestocksBySymbol.get(item.symbol);
+    const options = storedOptions.map((opt) => {
+      const weights = opt.weights.map((w) => {
+        const live = prestocksBySymbol.get(w.symbol);
+        return live
+          ? {
+              ...w,
+              mint: w.mint || live.contract_address,
+              name: live.name ?? w.name,
+              image: live.image ?? w.image,
+              markPrice: live.markPrice,
+              impliedValuation: live.impliedValuation
+            }
+          : w;
+      });
+      const icons = opt.icons && opt.icons.length > 0
+        ? opt.icons
+        : (weights.map((w) => w.image).filter(Boolean) as string[]);
       return {
-        symbol: item.symbol,
-        mint: item.mint,
-        bps: item.bps,
-        name: live?.name ?? item.symbol,
-        image: live?.image,
-        markPrice: live?.markPrice,
-        impliedValuation: live?.impliedValuation
+        ...opt,
+        icons,
+        weights
       };
     });
 
-    const marketWeights = [{ ...basketRegistry[0], bps: 10_000, name: "S&P 500 ETF" }];
-    const techWeights = [
-      { ...basketRegistry[1], bps: 5_000, name: "NVIDIA xStock" },
-      { ...basketRegistry[2], bps: 5_000, name: "Apple xStock" }
-    ];
-    const balancedWeights = [
-      { ...basketRegistry[0], bps: 4_000, name: "S&P 500 ETF" },
-      { ...basketRegistry[1], bps: 3_000, name: "NVIDIA xStock" },
-      { ...basketRegistry[2], bps: 3_000, name: "Apple xStock" }
-    ];
-
-    res.json({
-      options: [
-        {
-          id: "prestocks",
-          title: "Pre-IPO Giants",
-          tag: "POWERED BY PRESTOCKS",
-          isPartner: true,
-          detail: "OpenAI, SpaceX & Anthropic",
-          description: "Accumulate tokenized pre-IPO equity in the world's leading private AI and space companies.",
-          weights: prestocksWeights
-        },
-        {
-          id: "balanced",
-          title: "A bit of both",
-          detail: "Big tech + the whole market",
-          description: "Diversified mix of broad index exposure and blue-chip tech.",
-          weights: balancedWeights
-        },
-        {
-          id: "market",
-          title: "The whole market",
-          detail: "A little of almost everything",
-          description: "100% S&P 500 ETF representation for passive compounding.",
-          weights: marketWeights
-        },
-        {
-          id: "tech",
-          title: "Big tech",
-          detail: "A focused, bumpier pile",
-          description: "High-conviction tech leaders NVDA and AAPL.",
-          weights: techWeights
-        }
-      ],
-      prestocksCatalog: prestocks
-    });
+    res.json({ options, prestocksCatalog: prestocks });
   } catch (error) {
     res.status(500).json({ error: error instanceof Error ? error.message : "Unable to load plan options" });
+  }
+});
+
+app.post("/v1/plans/options", requireAuth, async (req: AuthenticatedRequest, res) => {
+  try {
+    const option = req.body as StoredPlanOption;
+    assertPlanInput(100, option.weights);
+    await savePlanOption(option);
+    res.status(200).json({ option });
+  } catch (error) {
+    res.status(400).json({ error: error instanceof Error ? error.message : "Unable to save plan option" });
   }
 });
 
@@ -233,9 +239,8 @@ app.post("/v1/plans", requireAuth, async (req: AuthenticatedRequest, res) => {
       if (await getActivePlan(userId)) throw new Error("An active weekly plan already exists; change it from your weekly plan screen");
       if (await getPausedPlan(userId)) throw new Error("A paused weekly plan already exists; resume it from your weekly plan screen");
       if ((await getCurrentPlan(userId))?.status === "pending_payment") throw new Error("A weekly payment is still being confirmed");
-      const weights = input.weights ?? weightsForMix(input.mix ?? "balanced");
+      const weights = input.weights ?? (await getWeightsForMix(input.mix ?? "prestocks"));
       assertPlanInput(input.amountUsd, weights);
-      assertConfiguredBasket(weights);
       const timestamp = new Date().toISOString();
       const plan = {
         id: randomUUID(), userId, amountUsd: input.amountUsd, interval: "week" as const, weights,
@@ -252,9 +257,8 @@ app.post("/v1/plans", requireAuth, async (req: AuthenticatedRequest, res) => {
 app.patch("/v1/plans/:planId", requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const input = changePlanSchema.parse(req.body);
-    const weights = weightsForMix(input.mix);
+    const weights = await getWeightsForMix(input.mix);
     assertPlanInput(input.amountUsd, weights);
-    assertConfiguredBasket(weights);
     const key = idempotencyKey(req);
     const plan = await beginPlanChange({ planId: String(req.params.planId), userId: getUserId(req), key, expectedUpdatedAt: input.expectedUpdatedAt, amountUsd: input.amountUsd, weights });
     if (plan.lastChangeKey === key) return res.json({ plan });

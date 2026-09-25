@@ -1,12 +1,14 @@
+import { useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
 import { ArrowRight, Check } from "lucide-react-native";
 import { useCallback, useState } from "react";
-import { Pressable, ScrollView, View, useWindowDimensions } from "react-native";
+import { Image, Pressable, ScrollView, View, useWindowDimensions } from "react-native";
 import { WeeklyAmountSlider } from "@/components/molecules/weekly-amount-slider";
 import { WeeklyForecast } from "@/components/organisms/weekly-forecast";
 import { Button } from "@/components/ui/button";
 import { Screen } from "@/components/ui/screen";
 import { Body, Eyebrow, Text, Title } from "@/components/ui/text";
+import { api } from "@/lib/api";
 import { useAppStore, type MixId } from "@/stores/app-store";
 
 type MixOption = {
@@ -16,34 +18,50 @@ type MixOption = {
   tag?: string;
   holdings?: string;
   isPartner?: boolean;
+  icons?: string[];
 };
 
-const mixes: MixOption[] = [
+const fallbackMixes: MixOption[] = [
+  {
+    id: "bigfour",
+    title: "The Big Four",
+    tag: "TOP 4 xSTOCKS",
+    detail: "World's 4 largest public companies",
+    holdings: "25% NVDAx · 25% AAPLx\n25% GOOGLx · 25% MSFTx",
+    icons: [
+      "https://assets.parqet.com/logos/symbol/NVDA?format=png",
+      "https://assets.parqet.com/logos/symbol/AAPL?format=png",
+      "https://assets.parqet.com/logos/symbol/GOOGL?format=png",
+      "https://assets.parqet.com/logos/symbol/MSFT?format=png"
+    ]
+  },
   {
     id: "prestocks",
     title: "Pre-IPO Giants",
-    detail: "OpenAI, SpaceX & Anthropic",
-    tag: "POWERED BY PRESTOCKS",
+    tag: "PRESTOCKS",
     isPartner: true,
-    holdings: "40% OpenAI · 30% SpaceX · 30% Anthropic"
+    detail: "Top private unicorns before IPO",
+    holdings: "35% OpenAI · 25% SpaceX\n25% Anthropic · 15% Anduril",
+    icons: [
+      "https://prestocks.com/logos/openai.png",
+      "https://prestocks.com/logos/spacex.png",
+      "https://prestocks.com/logos/anthropic.png",
+      "https://prestocks.com/logos/anduril.png"
+    ]
   },
   {
-    id: "balanced",
-    title: "A bit of both",
-    detail: "Big tech + the whole market",
-    holdings: "40% SPY · 30% NVDA · 30% AAPL"
-  },
-  {
-    id: "market",
-    title: "The whole market",
-    detail: "A little of almost everything",
-    holdings: "100% S&P 500 ETF"
-  },
-  {
-    id: "tech",
-    title: "Big tech",
-    detail: "A focused, bumpier pile",
-    holdings: "50% NVDA · 50% AAPL"
+    id: "faang",
+    title: "FAANG Basket",
+    tag: "BLUE CHIP TECH",
+    detail: "The 5 defining blue-chip tech titans",
+    holdings: "20% METAx · 20% AAPLx\n20% AMZNx · NFLXx · GOOGLx",
+    icons: [
+      "https://assets.parqet.com/logos/symbol/META?format=png",
+      "https://assets.parqet.com/logos/symbol/AAPL?format=png",
+      "https://assets.parqet.com/logos/symbol/AMZN?format=png",
+      "https://assets.parqet.com/logos/symbol/NFLX?format=png",
+      "https://assets.parqet.com/logos/symbol/GOOGL?format=png"
+    ]
   }
 ];
 
@@ -57,6 +75,17 @@ export default function Onboarding() {
   const topInset = Math.max(44, Math.min(64, height - 780));
   const changeAmount = useCallback((draftAmount: number) => setDraft({ draftAmount }), [setDraft]);
 
+  const optionsQuery = useQuery({ queryKey: ["plan-options"], queryFn: api.planOptions });
+  const mixes: MixOption[] = optionsQuery.data?.options?.map((opt) => ({
+    id: opt.id as MixId,
+    title: opt.title,
+    detail: opt.detail,
+    tag: opt.tag,
+    isPartner: opt.isPartner,
+    icons: opt.icons ?? (opt.weights.map((w) => w.image).filter(Boolean) as string[]),
+    holdings: opt.weights.map((w) => `${Math.round(w.bps / 100)}% ${w.symbol}`).join(" · ")
+  })) ?? fallbackMixes;
+
   return <Screen className="pt-0" footer={<Button onPress={() => step === 1 ? setStep(2) : mode === "edit" && planId ? router.push({ pathname: "/plan", params: { mode: "edit", planId } }) : signedIn === "1" ? router.push("/plan") : router.push("/sign-in")}><View className="w-full flex-row items-center justify-between"><Text className="font-semibold text-white">{step === 1 ? "Choose my mix" : "Save my pile"}</Text><ArrowRight size={21} color="#FAFAF8" /></View></Button>}>
     <View style={{ paddingTop: topInset }}>
       <Eyebrow className="text-[12px] tracking-normal">{step} OF 4 · {step === 1 ? "AMOUNT" : "MIX"}</Eyebrow>
@@ -69,32 +98,93 @@ export default function Onboarding() {
         <View className="mt-[13px]"><WeeklyAmountSlider amountUsd={amount} onChange={changeAmount} /></View>
       </> : <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }} className="mt-[24px]">
         <View className="gap-[14px]">
-          {mixes.map((option, index) => <MixChoice key={option.id} option={option} stones={3 + (index === 0 ? 1 : index === 2 ? 1 : index === 3 ? -1 : 0)} selected={mix === option.id} onPress={() => setDraft({ draftMix: option.id })} />)}
+          {mixes.map((option) => (
+            <MixChoice
+              key={option.id}
+              option={option}
+              selected={mix === option.id}
+              onPress={() => setDraft({ draftMix: option.id })}
+            />
+          ))}
         </View>
       </ScrollView>}
     </View>
   </Screen>;
 }
 
-function MixChoice({ option, stones, selected, onPress }: { option: MixOption; stones: number; selected: boolean; onPress: () => void }) {
-  return <Pressable accessibilityRole="radio" accessibilityState={{ selected }} onPress={onPress} className={`min-h-[110px] w-full rounded-[22px] p-5 ${selected ? "bg-pile-ink" : "bg-pile-fog"}`}>
-    <View className="flex-row items-center gap-2">
-      <Text className={`text-[17px] font-semibold ${selected ? "text-pile-paper" : "text-pile-ink"}`}>{option.title}</Text>
-      {option.tag ? (
-        <View className={`rounded-full px-2 py-0.5 ${selected ? "bg-[#CED25F]" : "bg-pile-stone"}`}>
-          <Text className={`text-[9px] font-bold tracking-wider ${selected ? "text-pile-ink" : "text-pile-paper"}`}>{option.tag}</Text>
+function MixChoice({ option, selected, onPress }: { option: MixOption; selected: boolean; onPress: () => void }) {
+  const icons = option.icons ?? [];
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ selected }}
+      onPress={onPress}
+      className={`min-h-[128px] w-full rounded-[22px] p-5 ${selected ? "bg-pile-ink" : "bg-pile-fog"}`}
+    >
+      <View className="flex-row items-center justify-between">
+        <View className="flex-row items-center gap-2">
+          <Text className={`text-[17px] font-semibold ${selected ? "text-pile-paper" : "text-pile-ink"}`}>
+            {option.title}
+          </Text>
+          {option.tag ? (
+            <View className={`rounded-full px-2 py-0.5 ${selected ? "bg-[#CED25F]" : "bg-pile-stone"}`}>
+              <Text className={`text-[9px] font-bold tracking-wider ${selected ? "text-pile-ink" : "text-pile-paper"}`}>
+                {option.tag}
+              </Text>
+            </View>
+          ) : null}
         </View>
-      ) : null}
-    </View>
-    <Text className={`mt-[6px] text-[13px] ${selected ? "text-pile-stone" : "text-pile-muted"}`}>{option.detail}</Text>
-    {option.holdings ? (
-      <Text className={`mt-[4px] text-[11px] font-medium ${selected ? "text-[#CED25F]" : "text-pile-muted"}`}>
-        {option.holdings}
+
+        {/* Radio or active check badge */}
+        {selected ? (
+          <View className="h-[22px] w-[22px] items-center justify-center rounded-full bg-[#CED25F]">
+            <Check size={13} color="#111110" strokeWidth={3} />
+          </View>
+        ) : (
+          <View className="h-[22px] w-[22px] rounded-full border-[1.5px] border-pile-stone bg-white" />
+        )}
+      </View>
+
+      <Text className={`mt-[6px] text-[13px] ${selected ? "text-pile-stone" : "text-pile-muted"}`}>
+        {option.detail}
       </Text>
-    ) : null}
-    <View pointerEvents="none" className="absolute right-5 top-5 h-[76px] w-[80px]">
-      {Array.from({ length: stones }, (_, index) => <View key={index} className="absolute h-[42px] w-[30px] rounded-full" style={{ right: 24 - index * 11, top: 21 - index * 7, transform: [{ rotate: index % 2 ? "8deg" : "-7deg" }], backgroundColor: selected ? (index === stones - 1 ? (option.isPartner ? "#CED25F" : "#BDBDB5") : "#D9D8D2") : "#D9D8D2" }} />)}
-      {selected ? <View className="absolute right-0 top-[-5px] h-[26px] w-[26px] items-center justify-center rounded-full" style={{ backgroundColor: option.isPartner ? "#CED25F" : "#BDBDB5" }}><Check size={14} color="#111110" /></View> : null}
-    </View>
-  </Pressable>;
+
+      <View className="mt-3 flex-row items-end justify-between">
+        {option.holdings ? (
+          <Text className={`max-w-[195px] text-[11px] font-medium leading-[15px] ${selected ? "text-[#CED25F]" : "text-pile-ink"}`}>
+            {option.holdings}
+          </Text>
+        ) : <View />}
+
+        {/* Stacked icon avatars */}
+        {icons.length > 0 ? (
+          <View className="flex-row items-center pl-2">
+            {icons.map((url, idx) => (
+              <View
+                key={`${option.id}-icon-${idx}`}
+                className={`h-[28px] w-[28px] overflow-hidden rounded-full border-2 bg-white ${
+                  selected ? "border-pile-ink" : "border-[#EDECE6]"
+                }`}
+                style={{
+                  marginLeft: idx === 0 ? 0 : -8,
+                  zIndex: idx + 1,
+                  shadowColor: "#000",
+                  shadowOffset: { width: 0, height: 1 },
+                  shadowOpacity: 0.1,
+                  shadowRadius: 2,
+                  elevation: 2
+                }}
+              >
+                <Image
+                  source={{ uri: url }}
+                  className="h-full w-full rounded-full"
+                  resizeMode="cover"
+                />
+              </View>
+            ))}
+          </View>
+        ) : null}
+      </View>
+    </Pressable>
+  );
 }
