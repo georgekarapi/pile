@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Screen } from "@/components/ui/screen";
 import { Body, Eyebrow, Text, Title } from "@/components/ui/text";
 import { api } from "@/lib/api";
+import { useAppStore } from "@/stores/app-store";
 
 type SetupStep = "intro" | "consent" | "terms" | "handoff" | "review" | "needs_information" | "permission" | "provisioning" | "unavailable";
 export default function CardScreen() {
@@ -20,10 +21,13 @@ export default function CardScreen() {
   const [step, setStep] = useState<SetupStep>("intro");
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const storedPlan = useAppStore((s) => s.plan);
+  const draftMix = useAppStore((s) => s.draftMix);
   useEffect(() => {
     if (preview && previewStep && ["intro", "consent", "terms", "handoff", "review", "needs_information", "permission", "provisioning", "unavailable"].includes(previewStep)) setStep(previewStep as SetupStep);
   }, [preview, previewStep]);
   const pile = useQuery({ queryKey: ["pile"], queryFn: api.pile, enabled: !preview }); const persisted = useQuery({ queryKey: ["current-card"], queryFn: api.currentCard, enabled: !preview });
+  const planQuery = useQuery({ queryKey: ["current-plan"], queryFn: api.currentPlan, enabled: !preview });
   const identity = useQuery({ queryKey: ["identity-status"], queryFn: api.identityStatus, enabled: !preview && persisted.isSuccess && !persisted.data.card, refetchInterval: 15_000 });
   useEffect(() => {
     if (identity.data?.status === "approved") setStep((current) => current === "provisioning" ? current : "permission");
@@ -36,6 +40,21 @@ export default function CardScreen() {
   const cardRecord = persisted.data?.card;
   const cardId = cardRecord?.bridgeCardAccountId; const available = pile.data?.health.cardAvailableUsd ?? 0;
   const pausedPreview = preview && previewStep === "paused";
+  const lockedPreview = preview && previewStep === "locked";
+
+  const activePlan = preview ? storedPlan : (planQuery.data?.plan ?? storedPlan);
+  const weights = activePlan?.weights;
+  const collateralUsd = pile.data?.health.collateralUsd ?? 0;
+  const hasCollateralOnChain = collateralUsd > 0;
+  const hasCollateralEligibleLegs = Boolean(
+    weights && weights.length > 0 && weights.some((w) => !w.mint.startsWith("Pre") && !["OPENAI", "SPACEX", "ANTHROPIC", "ANDURIL", "FIGUREAI"].includes(w.symbol))
+  );
+  const isPreIpoOnly = Boolean(
+    (weights && weights.length > 0 && !hasCollateralEligibleLegs) ||
+    (!weights?.length && draftMix === "prestocks")
+  );
+  const cardLockedForPreIpo = !hasCollateralOnChain && isPreIpoOnly;
+
   const setupReadError = persisted.error || identity.error || (step === "intro" ? pile.error : null);
   const setupReadPending = !persisted.isSuccess || !identity.isSuccess || (step === "intro" && !pile.isSuccess);
   const retrySetupRead = () => {
@@ -52,6 +71,47 @@ export default function CardScreen() {
   }, onSuccess: (status) => { void queryClient.invalidateQueries({ queryKey: ["identity-status"] }); setStep(status === "terms_pending" ? "terms" : status === "pending" ? "review" : status === "approved" ? "permission" : status === "unavailable" ? "unavailable" : "handoff"); } });
   const provision = useMutation({ mutationFn: api.card, onMutate: () => setStep("provisioning"), onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["current-card"] }); }, onError: () => setStep("permission") });
   const freeze = useMutation({ mutationFn: (frozen: boolean) => cardId ? api.freezeCard(cardId, frozen) : Promise.reject(new Error("No card")), onSuccess: () => { void queryClient.invalidateQueries({ queryKey: ["current-card"] }); } });
+
+  if (lockedPreview || (cardId && cardLockedForPreIpo)) {
+    return <Screen footer={<AppTabs />} footerKind="tabs" className="pt-0">
+      <View className="pt-[50px]">
+        <View className="flex-row items-center justify-between">
+          <Eyebrow className="text-[12px] tracking-normal">CARD · SPENDING LOCKED</Eyebrow>
+          <View className="rounded-full bg-amber-100 px-3 py-1">
+            <Text className="text-[10px] font-bold text-amber-900 tracking-wider">NO COLLATERAL</Text>
+          </View>
+        </View>
+        <Title className="mt-6 text-[32px] font-semibold leading-[42px]">Card spending{"\n"}is locked.</Title>
+        <View className="mt-4 rounded-[20px] bg-pile-fog p-[20px]">
+          <Text className="text-[17px] font-semibold text-pile-ink">Pre-IPO stocks cannot be collateral</Text>
+          <Body className="mt-2 text-[14px] leading-[20px]">
+            Your pile consists of Pre-IPO equity (PreStocks). Kamino Lending does not support Pre-IPO tokens as loan collateral.
+          </Body>
+          <Body className="mt-2 text-[13px] text-pile-muted">
+            Card spending requires collateral-eligible stocks (like The Big Four or FAANG). Add them to your weekly mix to unlock card spending.
+          </Body>
+        </View>
+        <View className="mt-5 h-[180px] justify-between rounded-[26px] bg-[#1C1B18] p-[20px]">
+          <View className="flex-row items-center justify-between">
+            <Text className="text-[18px] font-semibold text-white">pile</Text>
+            <View className="rounded-full bg-[#35332F] px-3 py-1">
+              <Text className="text-[10px] font-semibold text-stone-300 tracking-wider">SPENDING LOCKED</Text>
+            </View>
+          </View>
+          <View>
+            <Text className="text-[26px] font-semibold text-stone-400">$0.00 available</Text>
+            <Text className="mt-1 text-[12px] text-amber-400">Requires collateral-eligible stocks</Text>
+          </View>
+          <Text className="text-[12px] text-stone-400">{cardRecord?.last4 ? `•••• ${cardRecord.last4}` : "Card details unavailable"}   ·   VIRTUAL</Text>
+        </View>
+        <View className="mt-6 gap-3">
+          <Button onPress={() => router.push("/weekly-plan")}>Change weekly mix</Button>
+          <Button variant="secondary" onPress={() => router.push("/home")}>Return to my pile</Button>
+        </View>
+      </View>
+    </Screen>;
+  }
+
   if (pausedPreview || (cardId && pile.data && (pile.data.health.status === "warning" || pile.data.health.status === "critical"))) {
     const investmentValue = pausedPreview ? 950 : pile.data!.health.collateralUsd;
     const borrowed = pausedPreview ? 480 : pile.data!.health.debtUsd;
@@ -87,7 +147,7 @@ export default function CardScreen() {
     provisioning: { eye: "CARD SETUP", title: "Creating your\ncard.", body: "Keep Pile open while the final setup completes.", action: "Keep waiting", next: () => undefined },
     unavailable: { eye: "CARD SETUP", title: "We can’t finish\ncard setup.", body: "The card provider could not complete this request.", action: "Check status", next: () => void identity.refetch() }
   }[step];
-  return <Screen footer={<Button disabled={preview || (setupReadPending && !setupReadError) || (Boolean(setupReadError) && (persisted.isFetching || identity.isFetching || pile.isFetching)) || kyc.isPending || provision.isPending || (!setupReadError && step === "consent" && (fullName.trim().length < 2 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())))} onPress={setupReadError ? retrySetupRead : content.next}>{preview ? "Card setup requires the app build" : setupReadError ? "Try again" : content.action}</Button>}><Eyebrow>{content.eye}</Eyebrow><Title className="mt-5">{content.title}</Title><Body className="mt-4">{content.body}</Body>{step === "intro" ? <><View className="mt-5 rounded-[20px] bg-pile-ink p-5"><Text className="text-xs font-semibold text-pile-stone">CURRENTLY AVAILABLE</Text><Text className="mt-2 text-5xl font-bold text-white">{preview || pile.isSuccess ? `$${available.toFixed(2)}` : "Updating…"}</Text><Text className="mt-2 text-sm text-pile-stone">Can change as your pile changes</Text></View><View className="mt-3 rounded-[20px] bg-pile-fog p-5"><Text className="font-semibold">Before you get a card</Text><Body className="mt-1 text-sm">We’ll check eligibility, verify your identity, show the terms, and ask for one card permission.</Body></View></> : null}
+  return <Screen footer={<Button disabled={preview || (setupReadPending && !setupReadError) || (Boolean(setupReadError) && (persisted.isFetching || identity.isFetching || pile.isFetching)) || kyc.isPending || provision.isPending || (!setupReadError && step === "consent" && (fullName.trim().length < 2 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim())))} onPress={cardLockedForPreIpo && step === "intro" ? () => router.push("/weekly-plan") : setupReadError ? retrySetupRead : content.next}>{cardLockedForPreIpo && step === "intro" ? "Change weekly mix to unlock" : preview ? "Card setup requires the app build" : setupReadError ? "Try again" : content.action}</Button>}><Eyebrow>{content.eye}</Eyebrow><Title className="mt-5">{content.title}</Title><Body className="mt-4">{content.body}</Body>{cardLockedForPreIpo && step === "intro" ? <View className="mt-4 rounded-[18px] border border-amber-200 bg-amber-50 p-4"><Text className="text-[13px] font-bold text-amber-900">⚠️ PRE-IPO STOCKS CANNOT BE COLLATERAL</Text><Text className="mt-1 text-[13px] leading-[18px] text-amber-800">Your plan is set to Pre-IPO Giants. Pre-IPO tokens cannot be deposited into Kamino as loan collateral. To unlock card setup and spending, choose a mix with collateral-eligible stocks.</Text></View> : null}{step === "intro" ? <><View className="mt-5 rounded-[20px] bg-pile-ink p-5"><Text className="text-xs font-semibold text-pile-stone">CURRENTLY AVAILABLE</Text><Text className="mt-2 text-5xl font-bold text-white">{cardLockedForPreIpo ? "$0.00" : preview || pile.isSuccess ? `$${available.toFixed(2)}` : "Updating…"}</Text><Text className="mt-2 text-sm text-pile-stone">{cardLockedForPreIpo ? "Locked · No collateral assets" : "Can change as your pile changes"}</Text></View><View className="mt-3 rounded-[20px] bg-pile-fog p-5"><Text className="font-semibold">Before you get a card</Text><Body className="mt-1 text-sm">We’ll check eligibility, verify your identity, show the terms, and ask for one card permission.</Body></View></> : null}
     {step === "consent" ? <><View className="mt-4 gap-2"><Text className="text-[13px] font-semibold">Full legal name</Text><TextInput className="h-[58px] rounded-[14px] bg-pile-fog px-4 text-[16px] text-pile-ink" placeholder="Name as shown on your ID" placeholderTextColor="#62625E" autoCapitalize="words" value={fullName} onChangeText={setFullName} autoComplete="name" /><Text className="text-[13px] font-semibold">Email address</Text><TextInput className="h-[58px] rounded-[14px] bg-pile-fog px-4 text-[16px] text-pile-ink" placeholder="you@example.com" placeholderTextColor="#62625E" autoCapitalize="none" keyboardType="email-address" value={email} onChangeText={setEmail} autoComplete="email" /></View><View className="mt-4 rounded-[16px] bg-pile-fog p-[18px]"><Text className="text-[15px] font-semibold">Your choice</Text><Body className="mt-2 text-[13px]">You can keep building your pile without getting a card.</Body></View><Text className="mt-4 text-[13px] text-pile-muted" onPress={() => { const url = process.env.EXPO_PUBLIC_IDENTITY_PRIVACY_URL; if (url) void WebBrowser.openBrowserAsync(url); else Alert.alert("Privacy information unavailable", "Please try again later."); }}>How identity information is used →</Text></> : null}
     {step === "terms" || step === "handoff" ? <><View className="mt-4 rounded-[18px] border border-pile-ink p-[22px]"><ExternalLink size={28} color="#111110" /><Text className="mt-4 text-[20px] font-semibold">{step === "terms" ? "Bridge terms of service" : "Identity verification"}</Text><Body className="mt-3 text-[14px]">{step === "terms" ? "Review and accept the terms on Bridge’s secure page." : "The verification partner’s secure page will collect the required details."}</Body></View><View className="mt-4 rounded-[16px] bg-pile-fog p-[18px]"><Text className="text-[15px] font-semibold">{step === "terms" ? "Then verify your identity" : "Come back to this app"}</Text><Body className="mt-2 text-[13px]">{step === "terms" ? "Return to Pile to open the identity check. You can leave card setup at any time." : "Pile reads the result after you return. It does not store your identity document in the app."}</Body></View></> : null}
     {step === "review" ? <><View className="mt-4"><ProgressList items={[{ label: "Details submitted", detail: "Received securely", state: "done" }, { label: "Verification review", detail: "In progress", state: "current" }, { label: "Card setup", detail: "Starts after approval", state: "waiting" }]} /></View><View className="mt-4 rounded-[16px] bg-pile-fog p-[18px]"><Text className="text-[15px] font-semibold">We’ll let you know</Text><Body className="mt-2 text-[13px]">There’s nothing else to do unless more information is requested.</Body></View></> : null}

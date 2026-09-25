@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query";
 import { router, useLocalSearchParams } from "expo-router";
-import { ArrowRight, Check } from "lucide-react-native";
+import { ArrowRight, Check, Info } from "lucide-react-native";
 import { useCallback, useState } from "react";
 import { Image, Pressable, ScrollView, View, useWindowDimensions } from "react-native";
+import Svg, { Path } from "react-native-svg";
 import { WeeklyAmountSlider } from "@/components/molecules/weekly-amount-slider";
 import { WeeklyForecast } from "@/components/organisms/weekly-forecast";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,32 @@ import { Screen } from "@/components/ui/screen";
 import { Body, Eyebrow, Text, Title } from "@/components/ui/text";
 import { api } from "@/lib/api";
 import { useAppStore, type MixId } from "@/stores/app-store";
+
+function NoCardIcon({ size = 12, color = "#4A4842" }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <Path
+        stroke={color}
+        strokeWidth={1.75}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M12.5 20h-2c-3.759 0-5.638 0-6.893-.99a4.4 4.4 0 0 1-.554-.523C2 17.307 2 15.537 2 12s0-5.306 1.053-6.487q.253-.284.554-.522C4.862 4 6.741 4 10.5 4h3c3.759 0 5.638 0 6.892.99q.302.24.555.523C21.896 6.577 21.99 8.118 22 11"
+      />
+      <Path
+        stroke={color}
+        strokeWidth={1.75}
+        strokeLinejoin="round"
+        d="M2 9h20"
+      />
+      <Path
+        stroke={color}
+        strokeWidth={1.75}
+        strokeLinecap="round"
+        d="m22 14l-6 6m6 0l-6-6"
+      />
+    </Svg>
+  );
+}
 
 type MixOption = {
   id: MixId;
@@ -19,6 +46,10 @@ type MixOption = {
   holdings?: string;
   isPartner?: boolean;
   icons?: string[];
+  collateralEligible?: boolean;
+  notice?: string;
+  noticeBadge?: string;
+  noticeTooltip?: string;
 };
 
 const fallbackMixes: MixOption[] = [
@@ -27,6 +58,7 @@ const fallbackMixes: MixOption[] = [
     title: "The Big Four",
     tag: "TOP 4 xSTOCKS",
     detail: "World's 4 largest public companies",
+    collateralEligible: true,
     holdings: "25% NVDAx · 25% AAPLx\n25% GOOGLx · 25% MSFTx",
     icons: [
       "https://assets.parqet.com/logos/symbol/NVDA?format=png",
@@ -38,9 +70,13 @@ const fallbackMixes: MixOption[] = [
   {
     id: "prestocks",
     title: "Pre-IPO Giants",
-    tag: "PRESTOCKS",
+    tag: "POWERED BY PRESTOCKS",
     isPartner: true,
-    detail: "Top private unicorns before IPO",
+    detail: "Top private tech · High growth",
+    collateralEligible: false,
+    notice: "Pre-IPO equity cannot be used as collateral for card spending",
+    noticeBadge: "NO CARD",
+    noticeTooltip: "Pre-IPO equity is held directly in your self-custody Solana wallet. Kamino Lending currently has no reserves for private tech tokens, so they cannot back a card loan.",
     holdings: "35% OpenAI · 25% SpaceX\n25% Anthropic · 15% Anduril",
     icons: [
       "https://prestocks.com/logos/openai.png",
@@ -54,6 +90,7 @@ const fallbackMixes: MixOption[] = [
     title: "FAANG Basket",
     tag: "BLUE CHIP TECH",
     detail: "The 5 defining blue-chip tech titans",
+    collateralEligible: true,
     holdings: "20% METAx · 20% AAPLx\n20% AMZNx · NFLXx · GOOGLx",
     icons: [
       "https://assets.parqet.com/logos/symbol/META?format=png",
@@ -83,7 +120,11 @@ export default function Onboarding() {
     tag: opt.tag,
     isPartner: opt.isPartner,
     icons: opt.icons ?? (opt.weights.map((w) => w.image).filter(Boolean) as string[]),
-    holdings: opt.weights.map((w) => `${Math.round(w.bps / 100)}% ${w.symbol}`).join(" · ")
+    holdings: opt.weights.map((w) => `${Math.round(w.bps / 100)}% ${w.symbol}`).join(" · "),
+    collateralEligible: opt.collateralEligible ?? opt.id !== "prestocks",
+    notice: opt.notice ?? (opt.id === "prestocks" ? "Pre-IPO equity cannot be used as collateral for card spending" : undefined),
+    noticeBadge: opt.noticeBadge ?? (opt.id === "prestocks" ? "NO CARD" : undefined),
+    noticeTooltip: opt.noticeTooltip ?? (opt.id === "prestocks" ? "Pre-IPO equity is held directly in your self-custody Solana wallet. Kamino Lending currently has no reserves for private tech tokens, so they cannot back a card loan." : undefined)
   })) ?? fallbackMixes;
 
   return <Screen className="pt-0" footer={<Button onPress={() => step === 1 ? setStep(2) : mode === "edit" && planId ? router.push({ pathname: "/plan", params: { mode: "edit", planId } }) : signedIn === "1" ? router.push("/plan") : router.push("/sign-in")}><View className="w-full flex-row items-center justify-between"><Text className="font-semibold text-white">{step === 1 ? "Choose my mix" : "Save my pile"}</Text><ArrowRight size={21} color="#FAFAF8" /></View></Button>}>
@@ -113,13 +154,16 @@ export default function Onboarding() {
 }
 
 function MixChoice({ option, selected, onPress }: { option: MixOption; selected: boolean; onPress: () => void }) {
+  const [showTooltip, setShowTooltip] = useState(false);
   const icons = option.icons ?? [];
+  const isNoCollateral = option.collateralEligible === false;
+
   return (
     <Pressable
       accessibilityRole="radio"
       accessibilityState={{ selected }}
       onPress={onPress}
-      className={`min-h-[128px] w-full rounded-[22px] p-5 ${selected ? "bg-pile-ink" : "bg-pile-fog"}`}
+      className={`min-h-[132px] w-full rounded-[22px] p-5 ${selected ? "bg-pile-ink" : "bg-pile-fog"}`}
     >
       <View className="flex-row items-center justify-between">
         <View className="flex-row items-center gap-2">
@@ -127,8 +171,16 @@ function MixChoice({ option, selected, onPress }: { option: MixOption; selected:
             {option.title}
           </Text>
           {option.tag ? (
-            <View className={`rounded-full px-2 py-0.5 ${selected ? "bg-[#CED25F]" : "bg-pile-stone"}`}>
-              <Text className={`text-[9px] font-bold tracking-wider ${selected ? "text-pile-ink" : "text-pile-paper"}`}>
+            <View className={`rounded-full px-1.5 py-0.5 ${
+              option.id === "prestocks" || selected
+                ? "bg-[#CED25F]"
+                : "bg-pile-stone"
+            }`}>
+              <Text className={`text-[9px] font-bold tracking-wider ${
+                option.id === "prestocks" || selected
+                  ? "text-pile-ink"
+                  : "text-pile-paper"
+              }`}>
                 {option.tag}
               </Text>
             </View>
@@ -185,6 +237,54 @@ function MixChoice({ option, selected, onPress }: { option: MixOption; selected:
           </View>
         ) : null}
       </View>
+
+      {/* Notice badge / pill in bottom right of card */}
+      {isNoCollateral ? (
+        <View className="mt-2.5 flex-row justify-end items-center">
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="No card spending notice"
+            onPress={(e) => {
+              e.stopPropagation();
+              setShowTooltip((v) => !v);
+            }}
+            className={`flex-row items-center gap-1.5 rounded-full px-2.5 py-1 ${
+              selected
+                ? "bg-[#252420] border border-[#3E3C36]"
+                : "bg-[#E3E1D9] border border-[#D3D0C6]"
+            }`}
+          >
+            <NoCardIcon size={12} color={selected ? "#CED25F" : "#55534C"} />
+            <Text className={`text-[9.5px] font-bold tracking-wider ${selected ? "text-[#E8E6DF]" : "text-[#4A4842]"}`}>
+              NO CARD
+            </Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {/* Info Tooltip Popover */}
+      {showTooltip && isNoCollateral ? (
+        <View
+          className={`mt-2.5 rounded-[16px] p-3.5 shadow-md ${
+            selected ? "bg-[#22211E] border border-[#3E3C36]" : "bg-white border border-[#E2E0D8]"
+          }`}
+        >
+          <View className="flex-row items-center justify-between">
+            <View className="flex-row items-center gap-1.5">
+              <NoCardIcon size={14} color={selected ? "#CED25F" : "#111110"} />
+              <Text className={`text-[12px] font-bold ${selected ? "text-[#FAFAF8]" : "text-pile-ink"}`}>
+                No Card Collateral
+              </Text>
+            </View>
+            <Pressable hitSlop={10} onPress={(e) => { e.stopPropagation(); setShowTooltip(false); }}>
+              <Text className={`text-[12px] font-bold px-1 ${selected ? "text-stone-400" : "text-stone-500"}`}>✕</Text>
+            </Pressable>
+          </View>
+          <Text className={`mt-1.5 text-[11.5px] leading-[16px] ${selected ? "text-stone-300" : "text-[#55534E]"}`}>
+            {option.noticeTooltip ?? "Pre-IPO equity is held directly in your self-custody Solana wallet. Kamino Lending currently has no reserves for private tech tokens, so they cannot back a card loan."}
+          </Text>
+        </View>
+      ) : null}
     </Pressable>
   );
 }

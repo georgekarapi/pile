@@ -14,6 +14,10 @@ export type StoredPlanOption = {
   description?: string;
   weights: BasketWeight[];
   icons?: string[];
+  collateralEligible?: boolean;
+  notice?: string;
+  noticeBadge?: string;
+  noticeTooltip?: string;
   active?: boolean;
   order?: number;
   updatedAt?: string;
@@ -26,6 +30,7 @@ export const DEFAULT_PLAN_OPTIONS: StoredPlanOption[] = [
     tag: "TOP 4 xSTOCKS",
     detail: "World's 4 largest public companies",
     description: "Equal-weight 25% allocation to the four largest global tech leaders via tokenized xStocks.",
+    collateralEligible: true,
     icons: [
       "https://assets.parqet.com/logos/symbol/NVDA?format=png",
       "https://assets.parqet.com/logos/symbol/AAPL?format=png",
@@ -44,10 +49,14 @@ export const DEFAULT_PLAN_OPTIONS: StoredPlanOption[] = [
   {
     id: "prestocks",
     title: "Pre-IPO Giants",
-    tag: "PRESTOCKS",
+    tag: "POWERED BY PRESTOCKS",
     isPartner: true,
-    detail: "Top private unicorns before IPO",
-    description: "Accumulate tokenized pre-IPO equity in the world's leading private AI, space, and defense companies.",
+    detail: "Top private tech · High growth",
+    description: "Accumulate tokenized pre-IPO equity in the world's leading private AI, space, and defense companies. Note: Pre-IPO tokens cannot be collateralized for borrowing or card spending.",
+    collateralEligible: false,
+    notice: "Pre-IPO equity cannot be used as collateral for card spending.",
+    noticeBadge: "NO CARD",
+    noticeTooltip: "Pre-IPO equity is held directly in your self-custody Solana wallet. Kamino Lending currently has no reserves for private tech tokens, so they cannot back a card loan.",
     icons: [
       "https://prestocks.com/logos/openai.png",
       "https://prestocks.com/logos/spacex.png",
@@ -69,6 +78,7 @@ export const DEFAULT_PLAN_OPTIONS: StoredPlanOption[] = [
     tag: "BLUE CHIP TECH",
     detail: "The 5 defining blue-chip tech titans",
     description: "Equal-weight 20% allocation across Meta, Apple, Amazon, Netflix, and Alphabet.",
+    collateralEligible: true,
     icons: [
       "https://assets.parqet.com/logos/symbol/META?format=png",
       "https://assets.parqet.com/logos/symbol/AAPL?format=png",

@@ -376,6 +376,14 @@ app.post("/v1/cards", requireAuth, async (req: AuthenticatedRequest, res) => {
       }
       const current = providers();
       const owner = await current.wallet.getAddress(userId);
+      const health = await current.lend.getHealth(owner);
+      const plan = await getCurrentPlan(userId);
+      const hasCollateralEligibleLegs = plan?.weights.some(
+        (w) => !w.mint.startsWith("Pre") && !["OPENAI", "SPACEX", "ANTHROPIC", "ANDURIL", "FIGUREAI"].includes(w.symbol)
+      );
+      if (health.collateralUsd === 0 && plan && !hasCollateralEligibleLegs) {
+        throw new Error("Card spending requires collateral-eligible investments. Pre-IPO equity cannot be used as loan collateral on Kamino.");
+      }
       const result = await current.card.provision(userId, owner);
       assertTransactionWithinPolicy(result.approvalTransaction, { owner, allowedKinds: ["bridge_delegate"], allowedProgramIds: ["bridge-card", "spl-token"], allowedMints: [current.usdcMint], allowedRecipients: ["bridge-card"], maxInputAtomic: 100_000_000n });
       const approvalSignature = await current.wallet.signScoped(userId, result.approvalTransaction);
@@ -384,7 +392,13 @@ app.post("/v1/cards", requireAuth, async (req: AuthenticatedRequest, res) => {
       return { status: 201, body: { card: record, approvalSignature: approvalSignature.signature } };
     });
   } catch (error) {
-    res.status(error instanceof Error && error.message === "Bridge KYC approval required" ? 409 : 502).json({ error: error instanceof Error ? error.message : "Unable to provision card" });
+    res.status(
+      error instanceof Error && error.message === "Bridge KYC approval required"
+        ? 409
+        : error instanceof Error && error.message.includes("Pre-IPO")
+          ? 400
+          : 502
+    ).json({ error: error instanceof Error ? error.message : "Unable to provision card" });
   }
 });
 

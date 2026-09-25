@@ -25,6 +25,10 @@ export type PlanOption = {
   weights: BasketWeight[];
   icons?: string[];
   holdings?: string;
+  collateralEligible?: boolean;
+  notice?: string;
+  noticeBadge?: string;
+  noticeTooltip?: string;
 };
 export type PlanRevision = { amountUsd: number; weights: BasketWeight[]; stripePriceId: string; effectiveAt: string };
 export type PendingPlanChange = { key: string; amountUsd: number; weights: BasketWeight[]; expectedUpdatedAt: string; startedAt: string };

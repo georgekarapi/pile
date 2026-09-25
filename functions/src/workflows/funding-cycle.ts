@@ -54,6 +54,11 @@ export async function runFundingCycle(cycle: FundingCycle, plan: { userId: strin
     if (cycle.state === "depositing" || cycle.state === "deposits_submitted") {
       for (const [index, leg] of cycle.legs.entries()) {
         if (!leg.outputAtomic) throw new Error(`No output for ${leg.symbol}`);
+        const isCollateral = !leg.mint.startsWith("Pre") && !["OPENAI", "SPACEX", "ANTHROPIC", "ANDURIL"].includes(leg.symbol);
+        if (!isCollateral) {
+          // Pre-IPO stocks have no reserve on Kamino and cannot be collateralized; held directly in wallet.
+          continue;
+        }
         const existingSignature = cycle.depositSignatures[index];
         if (existingSignature) {
           await deps.lend.confirm(existingSignature);

@@ -76,15 +76,31 @@ function MixPie({ weights }: { weights: { symbol: string; bps: number }[] }) {
   </Svg>;
 }
 
-function InvestmentCard({ health, preview }: { health?: Health; preview: boolean }) {
-  const status = preview ? "Preview" : health?.status === "healthy" ? "Healthy" : health?.status === "warning" ? "Watchful" : health?.status === "critical" ? "Needs care" : "Updating";
+function InvestmentCard({ health, preview, isPreIpoOnly }: { health?: Health; preview: boolean; isPreIpoOnly?: boolean }) {
+  const status = preview
+    ? "Preview"
+    : isPreIpoOnly && (health?.collateralUsd ?? 0) === 0
+      ? "Wallet only"
+      : health?.status === "healthy"
+        ? "Healthy"
+        : health?.status === "warning"
+          ? "Watchful"
+          : health?.status === "critical"
+            ? "Needs care"
+            : "Updating";
   const fill = health && health.effectiveMaxLtvBps > 0 ? Math.min(100, Math.max(0, health.currentLtvBps / health.effectiveMaxLtvBps * 100)) : 0;
   const marker = health && health.effectiveMaxLtvBps > 0 ? Math.min(100, Math.max(0, health.safeCeilingLtvBps / health.effectiveMaxLtvBps * 100)) : 32.5;
   return <View className="mt-4 h-[214px] rounded-[24px] bg-pile-ink p-5">
     <View className="absolute right-5 top-4 rounded-full bg-pile-stone px-4 py-[5px]"><Text className="text-[11px] font-semibold">{status}</Text></View>
     <Text className="text-[10px] font-semibold text-pile-stone">INVESTMENT VALUE</Text>
     <Text className="mt-1 text-[32px] font-semibold leading-[40px] text-white">{health ? money(health.collateralUsd) : preview ? "$0.00" : "—"}</Text>
-    <Text className="mt-1 max-w-[290px] text-[12px] leading-[16px] text-pile-stone">{preview ? "No investment has been made in this preview." : "Your pile can back card spending when eligible."}</Text>
+    <Text className="mt-1 max-w-[290px] text-[12px] leading-[16px] text-pile-stone">
+      {preview
+        ? "No investment has been made in this preview."
+        : isPreIpoOnly && (health?.collateralUsd ?? 0) === 0
+          ? "Pre-IPO equity is held in wallet and not eligible for card collateral."
+          : "Your pile can back card spending when eligible."}
+    </Text>
     <View className="mt-[18px] h-[10px] rounded-full bg-[#FFFFFF26]"><View className="h-[10px] rounded-full bg-[#CED25F]" style={{ width: `${fill}%` }} /><View className="absolute top-[-23px] items-center" style={{ left: `${marker}%`, transform: [{ translateX: -23 }] }}><Text className="text-[10px] text-pile-stone">card limit</Text><View className="mt-1 h-[22px] w-[2px] bg-pile-stone" /></View></View>
     <View className="mt-[14px] flex-row justify-between"><View><Text className="text-[10px] font-semibold text-pile-stone">HEALTH LIMITER</Text><Text className="mt-1 text-[14px] text-white">{health ? `${money(health.debtUsd)} borrowed` : "No borrowing"}</Text></View><Text className="self-end text-[11px] text-pile-stone">{health?.status === "healthy" ? "within limit" : status.toLowerCase()}</Text></View>
   </View>;
@@ -113,10 +129,14 @@ export default function Home() {
   const toPlan = () => router.push("/weekly-plan");
   const isPreviewPaymentIssue = preview && (previewState === "payment_issue" || previewState === "payment_failed");
   const hasPaymentIssue = (!preview && (plan?.status === "live" || plan?.status === "paused") && Boolean(plan?.paymentIssue)) || isPreviewPaymentIssue;
+  const isPreIpoOnly = Boolean(
+    (weights && weights.length > 0 && weights.every((w) => ("mint" in w && typeof w.mint === "string" && w.mint.startsWith("Pre")) || ["OPENAI", "SPACEX", "ANTHROPIC", "ANDURIL", "FIGUREAI"].includes(w.symbol))) ||
+    (!plan && draftMix === "prestocks")
+  );
   return <Screen className="pt-0" footer={<AppTabs />} footerKind="tabs">
     <View className="pt-[60px]">
       <View className="h-8 flex-row items-center justify-between"><Text className="text-[14px] text-pile-muted">Good morning</Text><View className="h-8 w-8 items-center justify-center rounded-full bg-[#CED25F]"><View className="h-[5px] w-[5px] rounded-full bg-pile-ink" /></View></View>
-      <InvestmentCard health={pileQuery.data?.health} preview={preview} />
+      <InvestmentCard health={pileQuery.data?.health} preview={preview} isPreIpoOnly={isPreIpoOnly} />
       <View className="mt-[18px] h-[74px] flex-row items-center"><MixPie weights={weights} /><View className="ml-[18px] flex-1"><Eyebrow className="text-[10px] tracking-normal">YOUR WEEKLY MIX</Eyebrow><View className="mt-2 flex-row flex-wrap gap-y-1">{weights.map(({ symbol, bps }, idx) => <View key={symbol} className="w-1/2 flex-row items-center"><View className="mr-1 h-2 w-2 rounded-full" style={{ backgroundColor: getSymbolColor(symbol, idx) }} /><Text className="text-[12px]">{symbol} {Math.round(bps / 100)}%</Text></View>)}</View></View></View>
       <Eyebrow className="mt-6 text-[10px] tracking-normal">WEEKLY PLAN</Eyebrow>
       <Pressable onPress={toPlan} className="mt-2 h-[98px] flex-row items-center justify-between rounded-[18px] bg-pile-fog px-5"><View><Text className="text-[20px] font-semibold">${amount} every week</Text><Text className="mt-2 text-[13px] text-pile-muted">{getMixTitle(weights, optionsQuery.data?.options)} · Change plan</Text></View><ArrowRight size={22} color="#111110" /></Pressable>
