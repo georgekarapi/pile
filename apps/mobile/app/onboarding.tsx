@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Screen } from "@/components/ui/screen";
 import { Body, Eyebrow, Text, Title } from "@/components/ui/text";
 import { api } from "@/lib/api";
-import { useAppStore, type MixId } from "@/stores/app-store";
+import { useAppStore, type BundleId } from "@/stores/app-store";
 
 function NoCardIcon({ size = 12, color = "#4A4842" }: { size?: number; color?: string }) {
   return (
@@ -38,8 +38,8 @@ function NoCardIcon({ size = 12, color = "#4A4842" }: { size?: number; color?: s
   );
 }
 
-type MixOption = {
-  id: MixId;
+type BundleOption = {
+  id: BundleId;
   title: string;
   detail: string;
   tag?: string;
@@ -50,15 +50,17 @@ type MixOption = {
   notice?: string;
   noticeBadge?: string;
   noticeTooltip?: string;
+  apy?: number;
 };
 
-const fallbackMixes: MixOption[] = [
+const fallbackBundles: BundleOption[] = [
   {
     id: "bigfour",
     title: "The Big Four",
     tag: "TOP 4 xSTOCKS",
     detail: "World's 4 largest public companies",
     collateralEligible: true,
+    apy: 15,
     holdings: "25% NVDAx · 25% AAPLx\n25% GOOGLx · 25% MSFTx",
     icons: [
       "https://assets.parqet.com/logos/symbol/NVDA?format=png",
@@ -74,6 +76,7 @@ const fallbackMixes: MixOption[] = [
     isPartner: true,
     detail: "Top private tech · High growth",
     collateralEligible: false,
+    apy: 18,
     notice: "Pre-IPO equity cannot be used as collateral for card spending",
     noticeBadge: "NO CARD",
     noticeTooltip: "Pre-IPO equity is held directly in your self-custody Solana wallet. Kamino Lending currently has no reserves for private tech tokens, so they cannot back a card loan.",
@@ -91,6 +94,7 @@ const fallbackMixes: MixOption[] = [
     tag: "BLUE CHIP TECH",
     detail: "The 5 defining blue-chip tech titans",
     collateralEligible: true,
+    apy: 13,
     holdings: "20% METAx · 20% AAPLx\n20% AMZNx · NFLXx · GOOGLx",
     icons: [
       "https://assets.parqet.com/logos/symbol/META?format=png",
@@ -106,15 +110,15 @@ export default function Onboarding() {
   const { mode, planId, signedIn } = useLocalSearchParams<{ mode?: string; planId?: string; signedIn?: string }>();
   const [step, setStep] = useState<1 | 2>(1);
   const amount = useAppStore((s) => s.draftAmount);
-  const mix = useAppStore((s) => s.draftMix);
+  const bundle = useAppStore((s) => s.draftBundle);
   const setDraft = useAppStore((s) => s.setDraft);
   const { height } = useWindowDimensions();
   const topInset = Math.max(44, Math.min(64, height - 780));
   const changeAmount = useCallback((draftAmount: number) => setDraft({ draftAmount }), [setDraft]);
 
   const optionsQuery = useQuery({ queryKey: ["plan-options"], queryFn: api.planOptions });
-  const mixes: MixOption[] = optionsQuery.data?.options?.map((opt) => ({
-    id: opt.id as MixId,
+  const bundles: BundleOption[] = optionsQuery.data?.options?.map((opt) => ({
+    id: opt.id as BundleId,
     title: opt.title,
     detail: opt.detail,
     tag: opt.tag,
@@ -122,38 +126,48 @@ export default function Onboarding() {
     icons: opt.icons ?? (opt.weights.map((w) => w.image).filter(Boolean) as string[]),
     holdings: opt.weights.map((w) => `${Math.round(w.bps / 100)}% ${w.symbol}`).join(" · "),
     collateralEligible: opt.collateralEligible ?? opt.id !== "prestocks",
+    apy: opt.apy ?? (opt.id === "prestocks" ? 18 : opt.id === "bigfour" ? 15 : opt.id === "faang" ? 13 : 12),
     notice: opt.notice ?? (opt.id === "prestocks" ? "Pre-IPO equity cannot be used as collateral for card spending" : undefined),
     noticeBadge: opt.noticeBadge ?? (opt.id === "prestocks" ? "NO CARD" : undefined),
     noticeTooltip: opt.noticeTooltip ?? (opt.id === "prestocks" ? "Pre-IPO equity is held directly in your self-custody Solana wallet. Kamino Lending currently has no reserves for private tech tokens, so they cannot back a card loan." : undefined)
-  })) ?? fallbackMixes;
+  })) ?? fallbackBundles;
 
-  return <Screen className="pt-0" footer={<Button onPress={() => step === 1 ? setStep(2) : mode === "edit" && planId ? router.push({ pathname: "/plan", params: { mode: "edit", planId } }) : signedIn === "1" ? router.push("/plan") : router.push("/sign-in")}><View className="w-full flex-row items-center justify-between"><Text className="font-semibold text-white">{step === 1 ? "Choose my mix" : "Save my pile"}</Text><ArrowRight size={21} color="#FAFAF8" /></View></Button>}>
+  const selectedOption = bundles.find((m) => m.id === bundle) ?? bundles[0];
+
+  return <Screen className="pt-0" footer={<Button onPress={() => step === 1 ? setStep(2) : mode === "edit" && planId ? router.push({ pathname: "/plan", params: { mode: "edit", planId } }) : signedIn === "1" ? router.push("/plan") : router.push("/sign-in")}><View className="w-full flex-row items-center justify-between"><Text className="font-semibold text-white">{step === 1 ? "Choose weekly amount" : "Save my pile"}</Text><ArrowRight size={21} color="#FAFAF8" /></View></Button>}>
     <View style={{ paddingTop: topInset }}>
-      <Eyebrow className="text-[12px] tracking-normal">{step} OF 4 · {step === 1 ? "AMOUNT" : "MIX"}</Eyebrow>
-      <Title className="mt-[20px] text-[34px] font-semibold leading-[42px]">{step === 1 ? "Choose your\nweekly amount." : "What goes\nin your pile?"}</Title>
-      <Body className="mt-[6px] max-w-[320px] text-[14px] leading-[18px]">{step === 1 ? "Slide to see how a small weekly habit could grow over time." : "Choose a simple mix. Tap a choice to see the holdings and costs."}</Body>
-      {step === 1 ? <>
-        <View className="mt-[28px]"><WeeklyForecast amountUsd={amount} /></View>
-        <Eyebrow className="mt-[30px] text-[12px] tracking-normal">EACH WEEK</Eyebrow>
-        <View className="mt-[5px] flex-row items-end"><Text className="text-[62px] font-semibold leading-[75px]">${amount}</Text><Text className="mb-[10px] ml-7 text-[15px] text-pile-muted">every week</Text></View>
-        <View className="mt-[13px]"><WeeklyAmountSlider amountUsd={amount} onChange={changeAmount} /></View>
-      </> : <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }} className="mt-[24px]">
-        <View className="gap-[14px]">
-          {mixes.map((option) => (
-            <MixChoice
-              key={option.id}
-              option={option}
-              selected={mix === option.id}
-              onPress={() => setDraft({ draftMix: option.id })}
-            />
-          ))}
-        </View>
-      </ScrollView>}
+      <Eyebrow className="text-[12px] tracking-normal">{step === 1 ? "PLAN" : "AMOUNT"}</Eyebrow>
+      <Title className="mt-[20px] text-[34px] font-semibold leading-[42px]">{step === 1 ? "What goes\nin your pile?" : "Choose your\nweekly amount."}</Title>
+      <Body className="mt-[6px] max-w-[320px] text-[14px] leading-[18px]">{step === 1 ? "Choose a bundle to see holdings, details, and expected avg APY." : `Slide to see how your ${selectedOption.title} pile could grow at ${selectedOption.apy}% avg APY.`}</Body>
+      {step === 1 ? (
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 120 }} className="mt-[24px]">
+          <View className="gap-[14px]">
+            {bundles.map((option) => (
+              <BundleChoice
+                key={option.id}
+                option={option}
+                selected={bundle === option.id}
+                onPress={() => setDraft({ draftBundle: option.id })}
+              />
+            ))}
+          </View>
+        </ScrollView>
+      ) : (
+        <>
+          <View className="mt-[28px]"><WeeklyForecast amountUsd={amount} apy={selectedOption.apy ?? 12} bundleTitle={selectedOption.title} /></View>
+          <Pressable onPress={() => setStep(1)} className="mt-3.5 flex-row items-center gap-1 self-start active:opacity-70">
+            <Text className="text-[13px] text-pile-muted">Bundle: <Text className="font-semibold text-pile-ink">{selectedOption.title}</Text> ({selectedOption.apy}% APY) · <Text className="underline">Change</Text></Text>
+          </Pressable>
+          <Eyebrow className="mt-[26px] text-[12px] tracking-normal">EACH WEEK</Eyebrow>
+          <View className="mt-[5px] flex-row items-end"><Text className="text-[62px] font-semibold leading-[75px]">${amount}</Text><Text className="mb-[10px] ml-7 text-[15px] text-pile-muted">every week</Text></View>
+          <View className="mt-[13px]"><WeeklyAmountSlider amountUsd={amount} onChange={changeAmount} /></View>
+        </>
+      )}
     </View>
   </Screen>;
 }
 
-function MixChoice({ option, selected, onPress }: { option: MixOption; selected: boolean; onPress: () => void }) {
+function BundleChoice({ option, selected, onPress }: { option: BundleOption; selected: boolean; onPress: () => void }) {
   const [showTooltip, setShowTooltip] = useState(false);
   const icons = option.icons ?? [];
   const isNoCollateral = option.collateralEligible === false;
@@ -170,7 +184,18 @@ function MixChoice({ option, selected, onPress }: { option: MixOption; selected:
           <Text className={`text-[17px] font-semibold ${selected ? "text-pile-paper" : "text-pile-ink"}`}>
             {option.title}
           </Text>
-          {option.tag ? (
+          {option.apy ? (
+            <View className={`rounded-full px-2 py-0.5 ${
+              selected ? "bg-[#CED25F]" : "bg-pile-stone"
+            }`}>
+              <Text className={`text-[10px] font-bold ${
+                selected ? "text-pile-ink" : "text-pile-paper"
+              }`}>
+                {option.apy}% APY
+              </Text>
+            </View>
+          ) : null}
+          {option.tag && !option.apy ? (
             <View className={`rounded-full px-1.5 py-0.5 ${
               option.id === "prestocks" || selected
                 ? "bg-[#CED25F]"

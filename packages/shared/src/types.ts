@@ -13,15 +13,17 @@ export type FundingState =
   | "blocked_demo_cap"
   | "needs_attention";
 
-export type MixId = "bigfour" | "prestocks" | "faang" | "balanced" | "market" | "tech";
+export type BundleId = "bigfour" | "prestocks" | "faang" | "balanced" | "market" | "tech";
+export type MixId = BundleId;
 export type BasketWeight = { symbol: string; mint: string; bps: number; name?: string; image?: string; markPrice?: number; impliedValuation?: number };
 export type PlanOption = {
-  id: MixId;
+  id: BundleId;
   title: string;
   detail: string;
   tag?: string;
   isPartner?: boolean;
   description?: string;
+  apy?: number;
   weights: BasketWeight[];
   icons?: string[];
   holdings?: string;

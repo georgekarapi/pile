@@ -22,9 +22,9 @@ const order: Partial<Record<FundingState, number>> = {
 function steps(cycle: FundingCycle): ProgressItem[] {
   const blocked = cycle.state === "needs_attention" || cycle.state === "blocked_demo_cap";
   const current = cycle.state === "blocked_demo_cap" ? 1 : order[blocked ? cycle.resumeState ?? "invoice_paid" : cycle.state] ?? 0;
-  const names = ["Payment confirmed", "Funds arrived", "Buying your mix", "Adding to your pile", "Updating card room"];
+  const names = ["Payment confirmed", "Funds arrived", "Buying your bundle", "Adding to your pile", "Updating card room"];
   const collectionDate = new Date(cycle.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" });
-  const details = [`${collectionDate} · $${cycle.expectedUsd}`, "Ready for your investment", "Purchasing your selected mix", "Depositing into your pile", "Updating available card room"];
+  const details = [`${collectionDate} · $${cycle.expectedUsd}`, "Ready for your investment", "Purchasing your selected bundle", "Depositing into your pile", "Updating available card room"];
   return names.map((label, index) => ({
     label,
     detail: blocked && index === current ? "Needs attention" : index < current || cycle.state === "complete" ? details[index] : "Waiting",
@@ -56,7 +56,7 @@ export default function FundingScreen() {
   const cycle = preview ? (query.data?.cycle ?? mockCycle) : query.data?.cycle;
   const blocked = cycle?.state === "needs_attention" || cycle?.state === "blocked_demo_cap";
   const done = cycle?.state === "complete";
-  if (!cycle) return <Screen footer={<View className="gap-2"><Button variant="secondary" onPress={() => preview ? router.replace("/home") : void query.refetch()}>{preview ? "View my pile" : "Keep waiting"}</Button>{preview ? <Pressable className="items-center py-2" onPress={() => router.replace({ pathname: "/funding", params: { previewState: "payment_failed" } })}><Text className="text-[13px] font-semibold text-pile-muted">Preview payment failure →</Text></Pressable> : null}</View>}>
+  if (!cycle) return <Screen footer={<View className="gap-2"><Button variant={(preview || plan?.status === "live") ? "primary" : "secondary"} onPress={() => (preview || plan?.status === "live") ? router.replace("/home") : void query.refetch()}>{(preview || plan?.status === "live") ? "View my pile" : "Keep waiting"}</Button>{preview ? <Pressable className="items-center py-2" onPress={() => router.replace({ pathname: "/funding", params: { previewState: "payment_failed" } })}><Text className="text-[13px] font-semibold text-pile-muted">Preview payment failure →</Text></Pressable> : null}</View>}>
     <Eyebrow>{preview ? "EXPO GO PREVIEW" : "PAYMENT"}</Eyebrow>
     <Title className="mt-5">{preview ? "Your pile starts\nwith one stone." : "Confirming your\nweekly plan."}</Title>
     <Body className="mt-4">{preview ? "No payment or investment is made in this preview." : "We’re waiting for payment confirmation before starting your investment."}</Body>
@@ -141,7 +141,7 @@ function FirstPaymentIssueContent({ amountUsd, onUpdate, pending = false, error,
       <Eyebrow className="tracking-normal">PAYMENT NEEDS ATTENTION</Eyebrow>
       <Title className="mt-4 text-[36px] font-semibold leading-[39px]">We couldn’t start{"\n"}your plan.</Title>
       <Body className="mt-4">{preview ? "Expo Go preview. No payment will be made." : "The payment could not be confirmed."}</Body>
-      <View className="mt-4 gap-[6px] rounded-[16px] bg-pile-fog p-[18px]"><Text className="text-[15px] font-semibold">Your pile is unchanged</Text><Body className="text-[13px] leading-[18px]">No investment step has started. Your amount and mix are still saved.</Body></View>
+      <View className="mt-4 gap-[6px] rounded-[16px] bg-pile-fog p-[18px]"><Text className="text-[15px] font-semibold">Your pile is unchanged</Text><Body className="text-[13px] leading-[18px]">No investment step has started. Your amount and bundle are still saved.</Body></View>
       <View className="mt-4"><LabeledRow label="Weekly amount" value={`$${amountUsd}`} /><LabeledRow label="Payment method" value={preview ? "Preview" : "On file"} /></View>
       {error ? <Text className="mt-4 text-sm">{error}</Text> : null}
       {success ? <Body className="mt-4 text-sm">Checking your payment. Your plan starts only when Stripe confirms it.</Body> : null}

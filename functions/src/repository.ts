@@ -12,6 +12,7 @@ export type StoredPlanOption = {
   tag?: string;
   isPartner?: boolean;
   description?: string;
+  apy?: number;
   weights: BasketWeight[];
   icons?: string[];
   collateralEligible?: boolean;
@@ -31,6 +32,7 @@ export const DEFAULT_PLAN_OPTIONS: StoredPlanOption[] = [
     detail: "World's 4 largest public companies",
     description: "Equal-weight 25% allocation to the four largest global tech leaders via tokenized xStocks.",
     collateralEligible: true,
+    apy: 15,
     icons: [
       "https://assets.parqet.com/logos/symbol/NVDA?format=png",
       "https://assets.parqet.com/logos/symbol/AAPL?format=png",
@@ -54,6 +56,7 @@ export const DEFAULT_PLAN_OPTIONS: StoredPlanOption[] = [
     detail: "Top private tech · High growth",
     description: "Accumulate tokenized pre-IPO equity in the world's leading private AI, space, and defense companies. Note: Pre-IPO tokens cannot be collateralized for borrowing or card spending.",
     collateralEligible: false,
+    apy: 18,
     notice: "Pre-IPO equity cannot be used as collateral for card spending.",
     noticeBadge: "NO CARD",
     noticeTooltip: "Pre-IPO equity is held directly in your self-custody Solana wallet. Kamino Lending currently has no reserves for private tech tokens, so they cannot back a card loan.",
@@ -79,6 +82,7 @@ export const DEFAULT_PLAN_OPTIONS: StoredPlanOption[] = [
     detail: "The 5 defining blue-chip tech titans",
     description: "Equal-weight 20% allocation across Meta, Apple, Amazon, Netflix, and Alphabet.",
     collateralEligible: true,
+    apy: 13,
     icons: [
       "https://assets.parqet.com/logos/symbol/META?format=png",
       "https://assets.parqet.com/logos/symbol/AAPL?format=png",
@@ -100,7 +104,8 @@ export const DEFAULT_PLAN_OPTIONS: StoredPlanOption[] = [
     id: "balanced",
     title: "A bit of both",
     detail: "Big tech + the whole market",
-    description: "Diversified mix of broad index exposure and blue-chip tech.",
+    description: "Diversified bundle of broad index exposure and blue-chip tech.",
+    apy: 11,
     weights: [
       { symbol: "SPYx", mint: "SPYxPBLw4qMvjDug1s6v4E5nZ4J8qB6qD3f2G1h", bps: 4000, name: "S&P 500 ETF" },
       { symbol: "NVDAx", mint: "NVDAxQ6v4E5nZ4J8qB6qD3f2G1hSPYxPBLw4qMvjD", bps: 3000, name: "NVIDIA xStock" },
@@ -114,6 +119,7 @@ export const DEFAULT_PLAN_OPTIONS: StoredPlanOption[] = [
     title: "The whole market",
     detail: "A little of almost everything",
     description: "100% S&P 500 ETF representation for passive compounding.",
+    apy: 10,
     weights: [
       { symbol: "SPYx", mint: "SPYxPBLw4qMvjDug1s6v4E5nZ4J8qB6qD3f2G1h", bps: 10000, name: "S&P 500 ETF" }
     ],
@@ -125,6 +131,7 @@ export const DEFAULT_PLAN_OPTIONS: StoredPlanOption[] = [
     title: "Big tech",
     detail: "A focused, bumpier pile",
     description: "High-conviction tech leaders NVDA and AAPL.",
+    apy: 14,
     weights: [
       { symbol: "NVDAx", mint: "NVDAxQ6v4E5nZ4J8qB6qD3f2G1hSPYxPBLw4qMvjD", bps: 5000, name: "NVIDIA xStock" },
       { symbol: "AAPLx", mint: "AAPLxR6v4E5nZ4J8qB6qD3f2G1hSPYxPBLw4qMvjD", bps: 5000, name: "Apple xStock" }
@@ -145,7 +152,15 @@ export async function getPlanOptionsFromFirestore(): Promise<StoredPlanOption[]>
     return DEFAULT_PLAN_OPTIONS;
   }
   return snap.docs
-    .map((doc) => doc.data() as StoredPlanOption)
+    .map((doc) => {
+      const data = doc.data() as StoredPlanOption;
+      const defaultOpt = DEFAULT_PLAN_OPTIONS.find((d) => d.id === data.id);
+      return {
+        ...defaultOpt,
+        ...data,
+        apy: data.apy ?? defaultOpt?.apy
+      };
+    })
     .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
 }
 
@@ -153,7 +168,14 @@ export async function getPlanOptionById(id: string): Promise<StoredPlanOption | 
   const snap = await db().collection("plan_options").doc(id).get();
   if (snap.exists) {
     const data = snap.data() as StoredPlanOption;
-    if (data.active !== false) return data;
+    if (data.active !== false) {
+      const defaultOpt = DEFAULT_PLAN_OPTIONS.find((d) => d.id === data.id);
+      return {
+        ...defaultOpt,
+        ...data,
+        apy: data.apy ?? defaultOpt?.apy
+      };
+    }
   }
   const all = await getPlanOptionsFromFirestore();
   return all.find((opt) => opt.id === id);

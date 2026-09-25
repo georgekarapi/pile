@@ -9,7 +9,7 @@ config.transformer.unstable_transformProfile = "default";
 // Privy documents these resolver exceptions for dependencies whose published
 // package exports are not React Native-compatible yet.
 const resolveRequest = (context, moduleName, platform) => {
-  if (moduleName === "isows" || moduleName.startsWith("zustand")) {
+  if (moduleName === "isows" || moduleName.startsWith("zustand") || moduleName.startsWith("@privy-io/expo")) {
     return context.resolveRequest({ ...context, unstable_enablePackageExports: false }, moduleName, platform);
   }
   if (moduleName === "jose") {

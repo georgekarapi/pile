@@ -7,7 +7,11 @@ export type AuthenticatedRequest = Request & { pileUserId?: string };
 // Privy JWT verification belongs here. In demo mode we accept an explicitly marked
 // emulator header only; production requests must be verified before deployment.
 const privy = config.PRIVY_APP_ID && config.PRIVY_APP_SECRET
-  ? new PrivyClient({ appId: config.PRIVY_APP_ID, appSecret: config.PRIVY_APP_SECRET, jwtVerificationKey: config.PRIVY_JWT_VERIFICATION_KEY })
+  ? new PrivyClient({
+      appId: config.PRIVY_APP_ID,
+      appSecret: config.PRIVY_APP_SECRET,
+      jwtVerificationKey: config.PRIVY_JWT_VERIFICATION_KEY || undefined
+    })
   : undefined;
 
 export async function requireAuth(req: AuthenticatedRequest, res: Response, next: NextFunction) {
@@ -22,10 +26,12 @@ export async function requireAuth(req: AuthenticatedRequest, res: Response, next
   }
   if (!privy || !token) return res.status(401).json({ error: "A verified Privy access token is required" });
   try {
-    const claims = await privy.utils().auth().verifyAuthToken(token);
+    console.log("[FULL_TOKEN]", token);
+    const claims = await privy.utils().auth().verifyAccessToken(token);
     req.pileUserId = claims.user_id;
     next();
-  } catch {
+  } catch (err) {
+    console.error("[requireAuth verifyAccessToken error]", err);
     res.status(401).json({ error: "Invalid or expired Privy access token" });
   }
 }

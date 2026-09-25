@@ -9,14 +9,14 @@ import { Button } from "@/components/ui/button";
 import { Screen } from "@/components/ui/screen";
 import { Body, Text, Title } from "@/components/ui/text";
 import { api } from "@/lib/api";
-import { useAppStore, type MixId } from "@/stores/app-store";
+import { useAppStore, type BundleId } from "@/stores/app-store";
 
 export default function WeeklyPlan() {
   const preview = Constants.appOwnership === "expo";
   const { previewState } = useLocalSearchParams<{ previewState?: string }>();
   const storedPlan = useAppStore((s) => s.plan);
   const draftAmount = useAppStore((s) => s.draftAmount);
-  const draftMix = useAppStore((s) => s.draftMix);
+  const draftBundle = useAppStore((s) => s.draftBundle);
   const setDraft = useAppStore((s) => s.setDraft);
   const queryClient = useQueryClient();
   const query = useQuery({ queryKey: ["current-plan"], queryFn: api.currentPlan, enabled: !preview });
@@ -32,17 +32,17 @@ export default function WeeklyPlan() {
   const paused = plan?.status === "paused" || (preview && previewState === "paused");
   const amount = plan?.amountUsd ?? draftAmount;
   const matchedOption = options?.find((o) => {
-    if (!plan) return o.id === draftMix;
+    if (!plan) return o.id === draftBundle;
     if (o.weights.length !== plan.weights.length) return false;
     const bySymbol = new Map(plan.weights.map((w) => [w.symbol, w.bps]));
     return o.weights.every((w) => bySymbol.get(w.symbol) === w.bps);
   });
-  const mix = matchedOption?.title ?? (
-    plan?.weights.some((w) => w.symbol === "OPENAI" || w.symbol === "SPACEX" || w.symbol === "ANTHROPIC" || w.symbol === "ANDURIL") || draftMix === "prestocks"
+  const bundle = matchedOption?.title ?? (
+    plan?.weights.some((w) => w.symbol === "OPENAI" || w.symbol === "SPACEX" || w.symbol === "ANTHROPIC" || w.symbol === "ANDURIL") || draftBundle === "prestocks"
       ? "Pre-IPO Giants (PreStocks)"
-      : plan?.weights.length === 1 || draftMix === "market"
+      : plan?.weights.length === 1 || draftBundle === "market"
         ? "The whole market"
-        : plan?.weights.length === 2 || draftMix === "tech"
+        : plan?.weights.length === 2 || draftBundle === "tech"
           ? "Big tech"
           : "A bit of both"
   );
@@ -64,7 +64,7 @@ export default function WeeklyPlan() {
     });
     setDraft({
       draftAmount: plan.amountUsd,
-      draftMix: (matchedOption?.id as MixId) ?? (
+      draftBundle: (matchedOption?.id as BundleId) ?? (
         plan.weights.some((w) => w.symbol === "OPENAI" || w.symbol === "SPACEX" || w.symbol === "ANTHROPIC" || w.symbol === "ANDURIL")
           ? "prestocks"
           : plan.weights.some((w) => w.symbol === "METAx" || w.symbol === "NFLXx")
@@ -89,7 +89,7 @@ export default function WeeklyPlan() {
       <Title className="mt-4 text-[36px] font-semibold leading-[47px]">Your weekly{"\n"}rhythm.</Title>
       <Text className="mt-4 text-[62px] font-semibold leading-[73px]">${amount}</Text>
       <Text className="mt-2 text-[16px] text-pile-muted">Every week</Text>
-      <View className="mt-4"><LabeledRow label="Your mix" value={`${mix} →`} onPress={change} /><LabeledRow label="Next contribution" value={paused ? "Paused" : `Weekly · $${amount}`} /><LabeledRow label="Payment method" value={preview ? "Preview" : plan?.stripeSubscriptionId ? "On file →" : "Add securely →"} onPress={preview || paymentMethod.isPending ? undefined : () => paymentMethod.mutate()} /></View>
+      <View className="mt-4"><LabeledRow label="Your bundle" value={`${bundle} →`} onPress={change} /><LabeledRow label="Next contribution" value={paused ? "Paused" : `Weekly · $${amount}`} /><LabeledRow label="Payment method" value={preview ? "Preview" : plan?.stripeSubscriptionId ? "On file →" : "Add securely →"} onPress={preview || paymentMethod.isPending ? undefined : () => paymentMethod.mutate()} /></View>
       <Body className="mt-4 text-[14px] leading-[21px]">{paused ? "Your weekly collections are paused. Your existing investments remain in your pile." : "Make it fit your life. Changing or pausing your plan affects future contributions."}</Body>
       {preview ? <Text className="mt-3 text-xs text-pile-muted">Sample plan · No payment changes are made.</Text> : null}
       {pause.error || resume.error || paymentMethod.error ? <Text className="mt-3 text-sm">{(pause.error || resume.error || paymentMethod.error)?.message}</Text> : null}
@@ -104,7 +104,7 @@ function WeeklyPlanUnavailable({ loading, onRetry }: { loading: boolean; onRetry
       <Title className="mt-4 text-[36px] font-semibold leading-[47px]">Your weekly{"\n"}rhythm.</Title>
       <Text className="mt-4 text-[62px] font-semibold leading-[73px]">—</Text>
       <Text className="mt-2 text-[16px] text-pile-muted">Updating</Text>
-      <View className="mt-4"><LabeledRow label="Your mix" value="—" /><LabeledRow label="Next contribution" value="—" /><LabeledRow label="Payment method" value="—" /></View>
+      <View className="mt-4"><LabeledRow label="Your bundle" value="—" /><LabeledRow label="Next contribution" value="—" /><LabeledRow label="Payment method" value="—" /></View>
       <Body className="mt-4 text-[14px] leading-[21px]">{loading ? "Finding your weekly plan. This only takes a moment." : "We cannot show your weekly plan right now. Try again in a moment."}</Body>
     </View>
   </Screen>;

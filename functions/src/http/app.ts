@@ -19,6 +19,7 @@ import { createBridgeKycLink, getBridgeKycLink, identityStatusFromBridge } from 
 
 const planSchema = z.object({
   amountUsd: z.number().int().min(10).max(150).multipleOf(5),
+  bundle: z.string().min(1).optional(),
   mix: z.string().min(1).optional(),
   weights: z.array(z.object({
     symbol: z.string(),
@@ -30,14 +31,17 @@ const planSchema = z.object({
 });
 const changePlanSchema = z.object({
   amountUsd: z.number().int().min(10).max(150).multipleOf(5),
-  mix: z.string().min(1),
+  bundle: z.string().min(1).optional(),
+  mix: z.string().min(1).optional(),
   expectedUpdatedAt: z.string().min(1)
+}).refine((data) => Boolean(data.bundle || data.mix), {
+  message: "bundle is required"
 });
 const freezeSchema = z.object({ frozen: z.boolean() });
 
-async function getWeightsForMix(mixId: string) {
-  const option = await getPlanOptionById(mixId);
-  if (!option) throw new Error(`Plan option "${mixId}" not found`);
+async function getWeightsForBundle(bundleId: string) {
+  const option = await getPlanOptionById(bundleId);
+  if (!option) throw new Error(`Plan option "${bundleId}" not found`);
   const prestocks = await fetchPreStocks().catch(() => []);
   const prestocksBySymbol = new Map(prestocks.map((item) => [item.symbol, item]));
   return option.weights.map((w) => {
@@ -239,7 +243,8 @@ app.post("/v1/plans", requireAuth, async (req: AuthenticatedRequest, res) => {
       if (await getActivePlan(userId)) throw new Error("An active weekly plan already exists; change it from your weekly plan screen");
       if (await getPausedPlan(userId)) throw new Error("A paused weekly plan already exists; resume it from your weekly plan screen");
       if ((await getCurrentPlan(userId))?.status === "pending_payment") throw new Error("A weekly payment is still being confirmed");
-      const weights = input.weights ?? (await getWeightsForMix(input.mix ?? "prestocks"));
+      const bundleId = input.bundle ?? input.mix ?? "prestocks";
+      const weights = input.weights ?? (await getWeightsForBundle(bundleId));
       assertPlanInput(input.amountUsd, weights);
       const timestamp = new Date().toISOString();
       const plan = {
@@ -257,7 +262,8 @@ app.post("/v1/plans", requireAuth, async (req: AuthenticatedRequest, res) => {
 app.patch("/v1/plans/:planId", requireAuth, async (req: AuthenticatedRequest, res) => {
   try {
     const input = changePlanSchema.parse(req.body);
-    const weights = await getWeightsForMix(input.mix);
+    const bundleId = (input.bundle ?? input.mix)!;
+    const weights = await getWeightsForBundle(bundleId);
     assertPlanInput(input.amountUsd, weights);
     const key = idempotencyKey(req);
     const plan = await beginPlanChange({ planId: String(req.params.planId), userId: getUserId(req), key, expectedUpdatedAt: input.expectedUpdatedAt, amountUsd: input.amountUsd, weights });

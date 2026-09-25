@@ -10,7 +10,7 @@ import { LabeledRow } from "@/components/molecules/labeled-row";
 import { Button } from "@/components/ui/button";
 import { Screen } from "@/components/ui/screen";
 import { Body, Eyebrow, Text, Title } from "@/components/ui/text";
-import { useAppStore, type MixId } from "@/stores/app-store";
+import { useAppStore, type BundleId } from "@/stores/app-store";
 
 const termsUrl = process.env.EXPO_PUBLIC_INVESTMENT_TERMS_URL;
 function reviewCosts() {
@@ -18,19 +18,19 @@ function reviewCosts() {
   void WebBrowser.openBrowserAsync(termsUrl);
 }
 
-function matchesMix(weights: { symbol: string; bps: number }[], mix: MixId, options?: { id: string; weights: { symbol: string; bps: number }[] }[]) {
-  const opt = options?.find((o) => o.id === mix);
+function matchesBundle(weights: { symbol: string; bps: number }[], bundle: BundleId, options?: { id: string; weights: { symbol: string; bps: number }[] }[]) {
+  const opt = options?.find((o) => o.id === bundle);
   if (opt) {
     if (weights.length !== opt.weights.length) return false;
     const bySymbol = new Map(weights.map(({ symbol, bps }) => [symbol, bps]));
     return opt.weights.every((w) => bySymbol.get(w.symbol) === w.bps);
   }
   const bySymbol = new Map(weights.map(({ symbol, bps }) => [symbol, bps]));
-  if (mix === "bigfour") return bySymbol.has("NVDAx") && bySymbol.has("AAPLx") && bySymbol.has("GOOGLx") && bySymbol.has("MSFTx");
-  if (mix === "faang") return bySymbol.has("METAx") && bySymbol.has("NFLXx") && bySymbol.has("AMZNx");
-  if (mix === "prestocks") return bySymbol.has("OPENAI") || bySymbol.has("SPACEX") || bySymbol.has("ANTHROPIC");
-  if (mix === "market") return weights.length === 1 && bySymbol.get("SPYx") === 10_000;
-  if (mix === "tech") return weights.length === 2 && bySymbol.get("NVDAx") === 5_000 && bySymbol.get("AAPLx") === 5_000;
+  if (bundle === "bigfour") return bySymbol.has("NVDAx") && bySymbol.has("AAPLx") && bySymbol.has("GOOGLx") && bySymbol.has("MSFTx");
+  if (bundle === "faang") return bySymbol.has("METAx") && bySymbol.has("NFLXx") && bySymbol.has("AMZNx");
+  if (bundle === "prestocks") return bySymbol.has("OPENAI") || bySymbol.has("SPACEX") || bySymbol.has("ANTHROPIC");
+  if (bundle === "market") return weights.length === 1 && bySymbol.get("SPYx") === 10_000;
+  if (bundle === "tech") return weights.length === 2 && bySymbol.get("NVDAx") === 5_000 && bySymbol.get("AAPLx") === 5_000;
   return weights.length === 3 && bySymbol.get("SPYx") === 4_000;
 }
 
@@ -42,12 +42,12 @@ function ExpoGoPlan() {
   const { mode } = useLocalSearchParams<{ mode?: string }>();
   const editing = mode === "edit";
   const amount = useAppStore((s) => s.draftAmount);
-  const mix = useAppStore((s) => s.draftMix);
+  const bundle = useAppStore((s) => s.draftBundle);
   const optionsQuery = useQuery({ queryKey: ["plan-options"], queryFn: api.planOptions });
-  const displayMix = optionsQuery.data?.options.find((o) => o.id === mix)?.title ?? (mix === "bigfour" ? "The Big Four" : mix === "faang" ? "FAANG Basket" : mix === "prestocks" ? "Pre-IPO Giants (PreStocks)" : mix === "balanced" ? "A bit of both" : mix === "market" ? "The whole market" : "Big tech");
+  const displayBundle = optionsQuery.data?.options.find((o) => o.id === bundle)?.title ?? (bundle === "bigfour" ? "The Big Four" : bundle === "faang" ? "FAANG Basket" : bundle === "prestocks" ? "Pre-IPO Giants (PreStocks)" : bundle === "balanced" ? "A bit of both" : bundle === "market" ? "The whole market" : "Big tech");
   return <ReviewContent
     amount={amount}
-    mix={displayMix}
+    bundle={displayBundle}
     paymentMethod={editing ? "Preview" : "Add securely"}
     accountChecks="Preview"
     action={editing ? "Update weekly plan" : "Start my weekly pile"}
@@ -60,7 +60,7 @@ function ExpoGoPlan() {
 function NativePlan() {
   const { mode, planId } = useLocalSearchParams<{ mode?: string; planId?: string }>();
   const editing = mode === "edit" && Boolean(planId);
-  const setPlan = useAppStore((s) => s.setPlan); const amount = useAppStore((s) => s.draftAmount); const mix = useAppStore((s) => s.draftMix);
+  const setPlan = useAppStore((s) => s.setPlan); const amount = useAppStore((s) => s.draftAmount); const bundle = useAppStore((s) => s.draftBundle);
   const queryClient = useQueryClient();
   const optionsQuery = useQuery({ queryKey: ["plan-options"], queryFn: api.planOptions });
   const persisted = useQuery({ queryKey: ["current-plan"], queryFn: api.currentPlan }); const plan = persisted.data?.plan; const { initPaymentSheet, presentPaymentSheet } = useStripe();
@@ -73,9 +73,9 @@ function NativePlan() {
     if (!termsUrl) throw new Error("Investment costs and terms must be configured before a plan can start.");
     if (editing) {
       if (!plan || plan.id !== planId || plan.status !== "live") throw new Error("The active plan changed; return to your weekly plan and try again.");
-      return { plan: (await api.changePlan(plan.id, amount, mix, plan.updatedAt)).plan, mode: "changed" as const };
+      return { plan: (await api.changePlan(plan.id, amount, bundle, plan.updatedAt)).plan, mode: "changed" as const };
     }
-    const activePlan = plan?.status === "draft" && plan.amountUsd === amount && matchesMix(plan.weights, mix, optionsQuery.data?.options) ? plan : (await api.createPlan(amount, mix)).plan;
+    const activePlan = plan?.status === "draft" && plan.amountUsd === amount && matchesBundle(plan.weights, bundle, optionsQuery.data?.options) ? plan : (await api.createPlan(amount, bundle)).plan;
     setPlan(activePlan);
     const checkout = await api.activatePlan(activePlan.id);
     if (checkout.mode === "live") {
@@ -92,23 +92,23 @@ function NativePlan() {
     router.replace(mode === "changed" ? "/weekly-plan" : "/funding");
   } });
   const displayAmount = amount;
-  const displayMix = optionsQuery.data?.options.find((o) => o.id === mix)?.title ?? (mix === "bigfour" ? "The Big Four" : mix === "faang" ? "FAANG Basket" : mix === "prestocks" ? "Pre-IPO Giants (PreStocks)" : mix === "balanced" ? "A bit of both" : mix === "market" ? "The whole market" : "Big tech");
-  return <ReviewContent amount={displayAmount} mix={displayMix} paymentMethod={editing ? "On file" : "Add securely"} accountChecks="Signed in" action={start.isPending ? editing ? "Updating…" : "Starting…" : editing ? "Update weekly plan" : "Start my weekly pile"} onAction={() => start.mutate()} disabled={start.isPending || !persisted.isSuccess} error={start.error?.message ?? persisted.error?.message} editing={editing} />;
+  const displayBundle = optionsQuery.data?.options.find((o) => o.id === bundle)?.title ?? (bundle === "bigfour" ? "The Big Four" : bundle === "faang" ? "FAANG Basket" : bundle === "prestocks" ? "Pre-IPO Giants (PreStocks)" : bundle === "balanced" ? "A bit of both" : bundle === "market" ? "The whole market" : "Big tech");
+  return <ReviewContent amount={displayAmount} bundle={displayBundle} paymentMethod={editing ? "On file" : "Add securely"} accountChecks="Signed in" action={start.isPending ? editing ? "Updating…" : "Starting…" : editing ? "Update weekly plan" : "Start my weekly pile"} onAction={() => start.mutate()} disabled={start.isPending || !persisted.isSuccess} error={start.error?.message ?? persisted.error?.message} editing={editing} />;
 }
-function ReviewContent({ amount, mix, paymentMethod, accountChecks, action, onAction, disabled, error, preview = false, editing = false }: { amount: number; mix: string; paymentMethod: string; accountChecks: string; action: string; onAction: () => void; disabled?: boolean; error?: string; preview?: boolean; editing?: boolean }) {
+function ReviewContent({ amount, bundle, paymentMethod, accountChecks, action, onAction, disabled, error, preview = false, editing = false }: { amount: number; bundle: string; paymentMethod: string; accountChecks: string; action: string; onAction: () => void; disabled?: boolean; error?: string; preview?: boolean; editing?: boolean }) {
   return <Screen className="pt-0" footer={<Button disabled={disabled} onPress={onAction}>{action}</Button>}>
     <View className="pt-[60px]">
-      <Eyebrow className="tracking-normal">{editing ? "REVIEW CHANGES" : "4 OF 4 · REVIEW"}</Eyebrow>
+      <Eyebrow className="tracking-normal">{editing ? "REVIEW CHANGES" : "REVIEW"}</Eyebrow>
       <Title className="mt-3 text-[36px] font-semibold leading-[47px]">One small{"\n"}weekly habit.</Title>
       <View className="mt-3">
         <LabeledRow label="Every week" value={`$${amount}`} />
-        <LabeledRow label="Your mix" value={mix} />
+        <LabeledRow label="Your bundle" value={bundle} />
         <LabeledRow label="First collection" value={editing ? "Next billing day" : "Today"} />
         <LabeledRow label="Payment method" value={paymentMethod} />
         <LabeledRow label="Account checks" value={accountChecks} />
         <LabeledRow label="Investment terms" value="Review costs →" onPress={reviewCosts} />
       </View>
-      <Body className="mt-3 text-[14px] leading-[18px]">{editing ? preview ? "Preview only. Your new amount and mix would apply to future weekly collections; no payment is made in Expo Go." : "Your new amount and mix apply to future weekly collections. No payment is taken now." : preview ? `Preview only. No $${amount} payment or investment is made in Expo Go.` : `By starting, you authorize $${amount} today, then $${amount} each week. You can change or pause your plan.`}</Body>
+      <Body className="mt-3 text-[14px] leading-[18px]">{editing ? preview ? "Preview only. Your new amount and bundle would apply to future weekly collections; no payment is made in Expo Go." : "Your new amount and bundle apply to future weekly collections. No payment is taken now." : preview ? `Preview only. No $${amount} payment or investment is made in Expo Go.` : `By starting, you authorize $${amount} today, then $${amount} each week. You can change or pause your plan.`}</Body>
       <Text className="mt-3 text-[13px] text-pile-muted">Investments can rise and fall in value.</Text>
       {error ? <Text className="mt-4 text-sm">{error}</Text> : null}
     </View>

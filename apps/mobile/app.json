@@ -6,16 +6,22 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
+    "icon": "./assets/icon.png",
     "ios": {
-      "bundleIdentifier": "com.pile.app",
-      "usesAppleSignIn": true
+      "bundleIdentifier": "com.pile.app"
     },
     "android": {
-      "package": "com.pile.app"
+      "package": "com.pile.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#fafaf8"
+      }
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
     },
     "plugins": [
       "expo-router",
-      "expo-apple-authentication",
       [
         "@stripe/stripe-react-native",
         {

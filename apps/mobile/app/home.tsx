@@ -10,10 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Screen } from "@/components/ui/screen";
 import { Body, Eyebrow, Text } from "@/components/ui/text";
 import { api } from "@/lib/api";
-import { useAppStore, type MixId } from "@/stores/app-store";
+import { useAppStore, type BundleId } from "@/stores/app-store";
 
 const money = (amount: number) => `$${amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-const selectedWeights: Record<MixId, { symbol: string; bps: number }[]> = {
+const selectedWeights: Record<BundleId, { symbol: string; bps: number }[]> = {
   bigfour: [{ symbol: "NVDAx", bps: 2500 }, { symbol: "AAPLx", bps: 2500 }, { symbol: "GOOGLx", bps: 2500 }, { symbol: "MSFTx", bps: 2500 }],
   prestocks: [{ symbol: "OPENAI", bps: 3500 }, { symbol: "SPACEX", bps: 2500 }, { symbol: "ANTHROPIC", bps: 2500 }, { symbol: "ANDURIL", bps: 1500 }],
   faang: [{ symbol: "METAx", bps: 2000 }, { symbol: "AAPLx", bps: 2000 }, { symbol: "AMZNx", bps: 2000 }, { symbol: "NFLXx", bps: 2000 }, { symbol: "GOOGLx", bps: 2000 }],
@@ -22,7 +22,7 @@ const selectedWeights: Record<MixId, { symbol: string; bps: number }[]> = {
   tech: [{ symbol: "AAPLx", bps: 5000 }, { symbol: "NVDAx", bps: 5000 }]
 };
 const defaultPalette = ["#10A37F", "#1E3A8A", "#CC785C", "#D97706", "#7C3AED", "#2563EB", "#059669", "#D97706"];
-const mixColor: Record<string, string> = {
+const bundleColor: Record<string, string> = {
   OPENAI: "#10A37F",
   SPACEX: "#1E3A8A",
   ANTHROPIC: "#CC785C",
@@ -39,10 +39,10 @@ const mixColor: Record<string, string> = {
 };
 
 function getSymbolColor(symbol: string, index = 0): string {
-  return mixColor[symbol] ?? defaultPalette[index % defaultPalette.length];
+  return bundleColor[symbol] ?? defaultPalette[index % defaultPalette.length];
 }
 
-function getMixTitle(weights: { symbol: string; bps: number }[], options?: { title: string; weights: { symbol: string; bps: number }[] }[]) {
+function getBundleTitle(weights: { symbol: string; bps: number }[], options?: { title: string; weights: { symbol: string; bps: number }[] }[]) {
   const matched = options?.find((o) => {
     if (o.weights.length !== weights.length) return false;
     const bySymbol = new Map(weights.map((w) => [w.symbol, w.bps]));
@@ -64,9 +64,9 @@ function pieSlice(start: number, sweep: number) {
   return `M 32 32 L ${from.x} ${from.y} A 32 32 0 ${sweep > 180 ? 1 : 0} 1 ${to.x} ${to.y} Z`;
 }
 
-function MixPie({ weights }: { weights: { symbol: string; bps: number }[] }) {
+function BundlePie({ weights }: { weights: { symbol: string; bps: number }[] }) {
   let angle = -90;
-  return <Svg width={64} height={64} viewBox="0 0 64 64" accessibilityLabel="Selected weekly mix">
+  return <Svg width={64} height={64} viewBox="0 0 64 64" accessibilityLabel="Selected weekly bundle">
     {weights.length === 1 ? <Circle cx={32} cy={32} r={32} fill={getSymbolColor(weights[0].symbol, 0)} /> : weights.map(({ symbol, bps }, idx) => {
       const sweep = 360 * bps / 10_000;
       const path = <Path key={symbol} d={pieSlice(angle, sweep)} fill={getSymbolColor(symbol, idx)} />;
@@ -118,28 +118,28 @@ export default function Home() {
   const { previewState } = useLocalSearchParams<{ previewState?: string }>();
   const storedPlan = useAppStore((s) => s.plan);
   const draftAmount = useAppStore((s) => s.draftAmount);
-  const draftMix = useAppStore((s) => s.draftMix);
+  const draftBundle = useAppStore((s) => s.draftBundle);
   const planQuery = useQuery({ queryKey: ["current-plan"], queryFn: api.currentPlan, enabled: !preview });
   const optionsQuery = useQuery({ queryKey: ["plan-options"], queryFn: api.planOptions });
   const pileQuery = useQuery({ queryKey: ["pile"], queryFn: api.pile, refetchInterval: 30_000, enabled: !preview });
   const cycleQuery = useQuery({ queryKey: ["latest-funding-cycle"], queryFn: api.latestFundingCycle, enabled: !preview });
   const plan: Plan | undefined = preview ? storedPlan : planQuery.data?.plan ?? undefined;
-  const weights = plan?.weights ?? optionsQuery.data?.options.find((o) => o.id === draftMix)?.weights ?? selectedWeights[draftMix as MixId] ?? selectedWeights.balanced;
+  const weights = plan?.weights ?? optionsQuery.data?.options.find((o) => o.id === draftBundle)?.weights ?? selectedWeights[draftBundle as BundleId] ?? selectedWeights.balanced;
   const amount = plan?.amountUsd ?? draftAmount;
   const toPlan = () => router.push("/weekly-plan");
   const isPreviewPaymentIssue = preview && (previewState === "payment_issue" || previewState === "payment_failed");
   const hasPaymentIssue = (!preview && (plan?.status === "live" || plan?.status === "paused") && Boolean(plan?.paymentIssue)) || isPreviewPaymentIssue;
   const isPreIpoOnly = Boolean(
     (weights && weights.length > 0 && weights.every((w) => ("mint" in w && typeof w.mint === "string" && w.mint.startsWith("Pre")) || ["OPENAI", "SPACEX", "ANTHROPIC", "ANDURIL", "FIGUREAI"].includes(w.symbol))) ||
-    (!plan && draftMix === "prestocks")
+    (!plan && draftBundle === "prestocks")
   );
   return <Screen className="pt-0" footer={<AppTabs />} footerKind="tabs">
     <View className="pt-[60px]">
       <View className="h-8 flex-row items-center justify-between"><Text className="text-[14px] text-pile-muted">Good morning</Text><View className="h-8 w-8 items-center justify-center rounded-full bg-[#CED25F]"><View className="h-[5px] w-[5px] rounded-full bg-pile-ink" /></View></View>
       <InvestmentCard health={pileQuery.data?.health} preview={preview} isPreIpoOnly={isPreIpoOnly} />
-      <View className="mt-[18px] h-[74px] flex-row items-center"><MixPie weights={weights} /><View className="ml-[18px] flex-1"><Eyebrow className="text-[10px] tracking-normal">YOUR WEEKLY MIX</Eyebrow><View className="mt-2 flex-row flex-wrap gap-y-1">{weights.map(({ symbol, bps }, idx) => <View key={symbol} className="w-1/2 flex-row items-center"><View className="mr-1 h-2 w-2 rounded-full" style={{ backgroundColor: getSymbolColor(symbol, idx) }} /><Text className="text-[12px]">{symbol} {Math.round(bps / 100)}%</Text></View>)}</View></View></View>
+      <View className="mt-[18px] h-[74px] flex-row items-center"><BundlePie weights={weights} /><View className="ml-[18px] flex-1"><Eyebrow className="text-[10px] tracking-normal">YOUR WEEKLY BUNDLE</Eyebrow><View className="mt-2 flex-row flex-wrap gap-y-1">{weights.map(({ symbol, bps }, idx) => <View key={symbol} className="w-1/2 flex-row items-center"><View className="mr-1 h-2 w-2 rounded-full" style={{ backgroundColor: getSymbolColor(symbol, idx) }} /><Text className="text-[12px]">{symbol} {Math.round(bps / 100)}%</Text></View>)}</View></View></View>
       <Eyebrow className="mt-6 text-[10px] tracking-normal">WEEKLY PLAN</Eyebrow>
-      <Pressable onPress={toPlan} className="mt-2 h-[98px] flex-row items-center justify-between rounded-[18px] bg-pile-fog px-5"><View><Text className="text-[20px] font-semibold">${amount} every week</Text><Text className="mt-2 text-[13px] text-pile-muted">{getMixTitle(weights, optionsQuery.data?.options)} · Change plan</Text></View><ArrowRight size={22} color="#111110" /></Pressable>
+      <Pressable onPress={toPlan} className="mt-2 h-[98px] flex-row items-center justify-between rounded-[18px] bg-pile-fog px-5"><View><Text className="text-[20px] font-semibold">${amount} every week</Text><Text className="mt-2 text-[13px] text-pile-muted">{getBundleTitle(weights, optionsQuery.data?.options)} · Change plan</Text></View><ArrowRight size={22} color="#111110" /></Pressable>
       <LatestContribution cycle={cycleQuery.data?.cycle} preview={preview} paymentIssue={hasPaymentIssue} />
       <Button className="mt-[30px]" onPress={toPlan}><View className="w-full flex-row items-center justify-between"><Text className="font-semibold text-white">See weekly plan</Text><ArrowRight size={21} color="#FAFAF8" /></View></Button>
       {pileQuery.error ? <Body className="mt-3 text-xs">Investment value is unavailable right now.</Body> : null}

@@ -1,5 +1,6 @@
-import type { CardRecord, FundingCycle, Health, MixId, Plan, PlanOption } from "@pile/shared";
+import type { BundleId, CardRecord, FundingCycle, Health, MixId, Plan, PlanOption } from "@pile/shared";
 import Constants from "expo-constants";
+import * as Crypto from "expo-crypto";
 
 const baseUrl = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:5001/YOUR_PROJECT/europe-west1/api";
 const demoUser = process.env.EXPO_PUBLIC_DEMO_USER_ID ?? "demo-user";
@@ -28,14 +29,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 function mutation<T>(path: string, init: RequestInit): Promise<T> {
   return request<T>(path, {
     ...init,
-    headers: { "Idempotency-Key": crypto.randomUUID(), ...(init.headers ?? {}) }
+    headers: { "Idempotency-Key": Crypto.randomUUID(), ...(init.headers ?? {}) }
   });
 }
 
 export const api = {
   planOptions: () => request<{ options: PlanOption[]; prestocksCatalog: Record<string, unknown>[] }>("/v1/plans/options"),
-  createPlan: (amountUsd: number, mix: MixId) => mutation<{ plan: Plan }>("/v1/plans", { method: "POST", body: JSON.stringify({ amountUsd, mix }) }),
-  changePlan: (id: string, amountUsd: number, mix: MixId, expectedUpdatedAt: string) => mutation<{ plan: Plan }>(`/v1/plans/${id}`, { method: "PATCH", headers: { "Idempotency-Key": `plan-change-${id}-${expectedUpdatedAt}-${amountUsd}-${mix}` }, body: JSON.stringify({ amountUsd, mix, expectedUpdatedAt }) }),
+  createPlan: (amountUsd: number, bundle: BundleId) => mutation<{ plan: Plan }>("/v1/plans", { method: "POST", body: JSON.stringify({ amountUsd, bundle, mix: bundle }) }),
+  changePlan: (id: string, amountUsd: number, bundle: BundleId, expectedUpdatedAt: string) => mutation<{ plan: Plan }>(`/v1/plans/${id}`, { method: "PATCH", headers: { "Idempotency-Key": `plan-change-${id}-${expectedUpdatedAt}-${amountUsd}-${bundle}` }, body: JSON.stringify({ amountUsd, bundle, mix: bundle, expectedUpdatedAt }) }),
   currentPlan: () => request<{ plan: Plan | null }>("/v1/plans/current"),
   paymentMethodSession: () => mutation<{ url: string }>("/v1/billing/payment-method-session", { method: "POST" }),
   syncPaymentMethod: () => mutation<{ changed: boolean }>("/v1/billing/payment-method-sync", { method: "POST" }),
